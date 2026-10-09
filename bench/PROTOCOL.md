@@ -1,6 +1,6 @@
 # Benchmark protocol
 
-**Version 1, written 2026-10-09, before any run it governs.** Thresholds change only before the run they govern, and every change is logged at the bottom with its date. A result is reported whether or not it meets its rule.
+**Version 1.1, 2026-10-09. Version 1 was written before any run; 1.1 followed the pilot and precedes every run it governs (see the changelog).** Thresholds change only before the run they govern, and every change is logged at the bottom with its date. A result is reported whether or not it meets its rule.
 
 ## Why this exists
 
@@ -12,8 +12,8 @@ Each claim below is a sentence the README may say only if its rule is met. The m
 
 | # | Claim | Test | Rule |
 | --- | --- | --- | --- |
-| C1 | On building code, Sonnet at medium is as good as Opus at high, for less | [`aider-polyglot`](aider-polyglot), 3 runs per arm | The lower bound of the 95% interval for (Sonnet pass rate − Opus pass rate) is at least −5 points, **and** Sonnet's cost is at most 50% of Opus's. |
-| C2 | High effort buys nothing on builds | Same task set, Sonnet at medium and at high | The 95% interval for (high − medium) contains 0, **and** high costs at least 1.5× medium. |
+| C1 | On building code, Sonnet at medium is as good as Opus at high, for less | [`aider-polyglot`](aider-polyglot), 3 runs per arm | On pass at 2, the lower bound of the 95% interval for (Sonnet − Opus) is at least −5 points, **and** Sonnet's cost is at most 50% of Opus's. Pass at 1 is reported beside it. |
+| C2 | High effort buys nothing on builds | Same task set, Sonnet at medium and at high | On pass at 2, the 95% interval for (high − medium) contains 0, **and** high costs at least 1.5× medium. |
 | C3 | The router sends each prompt to a model that is good enough, for less | Routing table (below), run once on the frozen test split | It recovers at least 90% of the gap between always-Haiku and always-Opus quality, at no more than 60% of always-Opus cost, **and** beats random routing at the same share of calls by at least 5 points of quality. |
 | C4 | It saves money in real use without more redos | Field holdout inside the plugin | Not set yet. The rule is fixed before the first data is collected, not after. |
 | C5 | It saves five-hour quota on Pro and Max | A-B-A-B protocol on a real subscription | Not set yet. Same rule: fixed before data. |
@@ -24,7 +24,7 @@ Each claim below is a sentence the README may say only if its rule is met. The m
 2. **Dev and test are separate, and the router is frozen before the test split runs.** The router is tuned on dev prompts only. The commit that is run on test is recorded. The test split is run once.
 3. **At least 3 runs per arm per task** for any comparison a claim depends on. Pass rates are reported with 95% intervals (Wilson for one arm, paired bootstrap over tasks for a difference). A difference of one task in twenty is not reported as a difference.
 4. **Everything is pinned and printed with the result:** Claude Code version, model ids, effort, date, harness commit, the exact prompt given to the model.
-5. **No answer key on the model's disk.** Reference solutions and hidden tests are never in a folder the model can read while it works. After each run, its transcript is searched for any access to the answer-key locations, and the count is reported with the result.
+5. **No answer key on the model's disk.** Reference solutions and hidden tests are never in a folder the model can read while it works. After each run, its transcript is searched twice and both counts are reported: `touched` (the model's own tool calls name the answer key or another run's folder) and `seen` (only a tool's output showed it). A run with `touched` above 0 is excluded and repeated. A run with `seen` above 0 is read by hand and what the reading found is recorded. Commands that leave the run's own folder are also read by hand, because a bare `ls ../` shows only names and the search can't catch it.
 6. **Every run is counted.** Failed runs stay in the denominator. A run is repeated only when it died of infrastructure (a timeout before any model call, a network error), and the repeat is noted.
 7. **Cost is what the API reports** (`total_cost_usd`, list prices). Subscription quota is reported separately and never converted into dollars.
 8. **Pilots don't count.** A pilot measures cost and checks the harness. Its numbers are labelled as such and never support a claim.
@@ -37,9 +37,14 @@ Run every prompt on every arm once (Haiku, Sonnet, Opus, each at the effort the 
 - **Quality** comes from a blind pairwise judge against the always-Opus answer, with a rubric fixed in advance. A subset of at least 50 pairs is also judged by a person, blind. If the judge and the person disagree on more than 20% of that subset, the judge's scores are not used.
 - **Metrics** follow RouteLLM: performance gap recovered (PGR) and the share of calls to the strong model needed to reach a target quality (CPT), plus the cost–quality curve.
 
+## Pass at 1 and pass at 2
+
+A task's hidden tests may need something its text never states: an exported name, an exact error message, a return type. With one attempt and no feedback, the first attempt then measures whether the model happens to know the convention, which is recall of a public exercise as much as coding. Pass at 1 is the first attempt. **Pass at 2** adds one more attempt that is shown the tail of the failing test output (never the test files), as Aider does and as an agent that runs tests would experience. Both are reported; pass at 2 is the one the rules above use. The pilot is why: [`aider-polyglot`](aider-polyglot#why-the-first-attempt-gap-isnt-about-coding).
+
 ## Known limits, stated now
 
 - **Public benchmarks may be memorised.** Aider's exercises have been public for years. Absolute pass rates are unreliable; the comparison between arms, which share the exposure, is what we use.
+- **At pass at 2 the pilot's models were at the ceiling.** On its 30 exercises they scored 97%, 100% and 100%, so the set may not be able to separate Sonnet from Opus. If it can't, C1's "as good" is met trivially and the real question, where Opus earns its price, needs harder tasks.
 - **Aider polyglot is puzzles, not repositories.** It says nothing about navigating a large codebase, and since every task is a build task the router would send all of it to one model. That is why C3 has its own table.
 - **Our harness is not Aider's leaderboard protocol.** It is agentic (Claude Code), the tests are hidden, and there is one attempt with no test feedback. Our numbers are not comparable to the leaderboard.
 - **An LLM judge favours its own family.** This is why a person scores a subset.
@@ -48,3 +53,4 @@ Run every prompt on every arm once (Haiku, Sonnet, Opus, each at the effort the 
 ## Changelog
 
 - 2026-10-09: version 1.
+- 2026-10-09: version 1.1, after the pilot and before any run it governs. Pass at 2 became the primary measure for C1 and C2, because the pilot showed pass at 1 rewards details a task doesn't state (5 of the 9 exercises where models differed). The audit now counts `touched` and `seen` separately and requires a hand reading of commands that leave a run's folder. The ceiling is listed as a known limit. The thresholds were not changed.

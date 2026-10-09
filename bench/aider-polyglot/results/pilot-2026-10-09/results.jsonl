@@ -1,0 +1,90 @@
+{"task": "go-matrix", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.073019, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-matrix", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00504915, "seconds": 18, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-scale-generator", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1526948, "seconds": 22, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-scale-generator", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.09457080000000001, "seconds": 23, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-matrix", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1751366, "seconds": 28, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-sublist", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00536313, "seconds": 17, "turns": 5, "error": null, "audit": 0, "seen": 0}
+{"task": "go-sublist", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.076013, "seconds": 16, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-scale-generator", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.010444800000000002, "seconds": 49, "turns": 6, "error": null, "audit": 0, "seen": 0}
+{"task": "go-sublist", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.2584198, "seconds": 155, "turns": 10, "error": null, "audit": 0, "seen": 0}
+{"task": "go-error-handling", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0784358, "seconds": 15, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-book-store", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0709244, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-error-handling", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1591928, "seconds": 22, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-error-handling", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.006290220000000001, "seconds": 24, "turns": 5, "error": null, "audit": 0, "seen": 0}
+{"task": "go-book-store", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1640146, "seconds": 31, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-forth", "model": "sonnet", "effort": "medium", "rep": 0, "passed": false, "cost": 0.0790552, "seconds": 19, "turns": 3, "error": null, "audit": 0, "cost2": 0.12600820000000001, "seconds2": 10, "turns2": 2, "error2": null, "passed2": true, "seen": 0}
+{"task": "go-forth", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1634336, "seconds": 29, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-markdown", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.086359, "seconds": 25, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-forth", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.009105720000000001, "seconds": 42, "turns": 5, "error": null, "audit": 0, "cost2": 0.013064280000000001, "seconds2": 14, "turns2": 3, "error2": null, "passed2": true, "seen": 0}
+{"task": "go-markdown", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.18078419999999998, "seconds": 32, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-paasio", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.07221000000000001, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-paasio", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00565178, "seconds": 36, "turns": 5, "error": null, "audit": 0, "seen": 0}
+{"task": "go-pig-latin", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00607883, "seconds": 27, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-paasio", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.26869400000000004, "seconds": 39, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-pig-latin", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1405876, "seconds": 20, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-protein-translation", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0711382, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-protein-translation", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1686788, "seconds": 28, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-markdown", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.025495710000000008, "seconds": 134, "turns": 11, "error": null, "audit": 0, "seen": 0}
+{"task": "go-react", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.010315460000000002, "seconds": 48, "turns": 7, "error": null, "audit": 0, "seen": 0}
+{"task": "go-say", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0050195, "seconds": 17, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-react", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1604216, "seconds": 27, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-say", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0670926, "seconds": 13, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-say", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1376346, "seconds": 19, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-simple-linked-list", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.00471345, "seconds": 18, "turns": 4, "error": null, "audit": 0, "cost2": 0.0086411, "seconds2": 16, "turns2": 3, "error2": null, "passed2": true, "seen": 0}
+{"task": "go-simple-linked-list", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0707476, "seconds": 17, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-simple-linked-list", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.13784659999999999, "seconds": 21, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-trinary", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.004689499999999999, "seconds": 21, "turns": 4, "error": null, "audit": 0, "cost2": 0.00816215, "seconds2": 15, "turns2": 3, "error2": null, "passed2": false, "seen": 0}
+{"task": "go-trinary", "model": "sonnet", "effort": "medium", "rep": 0, "passed": false, "cost": 0.0675726, "seconds": 16, "turns": 3, "error": null, "audit": 0, "cost2": 0.1160918, "seconds2": 18, "turns2": 2, "error2": null, "passed2": true, "seen": 0}
+{"task": "go-trinary", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.16902419999999999, "seconds": 33, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-two-bucket", "model": "sonnet", "effort": "medium", "rep": 0, "passed": false, "cost": 0.07445940000000001, "seconds": 16, "turns": 3, "error": null, "audit": 0, "cost2": 0.1181238, "seconds2": 9, "turns2": 2, "error2": null, "passed2": true, "seen": 0}
+{"task": "go-two-bucket", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.2648282, "seconds": 157, "turns": 7, "error": null, "audit": 0, "seen": 0}
+{"task": "python-book-store", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.009205070000000001, "seconds": 39, "turns": 9, "error": null, "audit": 0, "seen": 0}
+{"task": "python-book-store", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0704778, "seconds": 14, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-book-store", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.12885459999999999, "seconds": 23, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-bottle-song", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00466142, "seconds": 16, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "python-bottle-song", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0672398, "seconds": 15, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-bottle-song", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.13907440000000001, "seconds": 16, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "go-book-store", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.011514189999999999, "seconds": 625, "turns": 1, "error": null, "audit": 0, "seen": 0}
+{"task": "python-bowling", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.01219964, "seconds": 60, "turns": 7, "error": null, "audit": 0, "seen": 0}
+{"task": "python-bowling", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0777338, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-bowling", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1442302, "seconds": 20, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-grade-school", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.00491399, "seconds": 18, "turns": 4, "error": null, "audit": 0, "cost2": 0.00787288, "seconds2": 9, "turns2": 2, "error2": null, "passed2": true, "seen": 0}
+{"task": "python-grade-school", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.067924, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-grade-school", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1196536, "seconds": 14, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-list-ops", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.00558815, "seconds": 18, "turns": 5, "error": null, "audit": 0, "cost2": 0.00866447, "seconds2": 12, "turns2": 3, "error2": null, "passed2": true, "seen": 0}
+{"task": "python-list-ops", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.07229999999999999, "seconds": 16, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-list-ops", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.13191560000000002, "seconds": 18, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-pov", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.00768145, "seconds": 28, "turns": 6, "error": null, "audit": 0, "cost2": 0.01125097, "seconds2": 10, "turns2": 3, "error2": null, "passed2": true, "seen": 0}
+{"task": "python-pov", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.072879, "seconds": 15, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-proverb", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00625592, "seconds": 21, "turns": 7, "error": null, "audit": 0, "seen": 0}
+{"task": "python-pov", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.16620700000000002, "seconds": 25, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "python-proverb", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0641252, "seconds": 12, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-proverb", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.11649200000000001, "seconds": 13, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-scale-generator", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0718626, "seconds": 13, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-scale-generator", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1414642, "seconds": 19, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-scale-generator", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.009321010000000001, "seconds": 39, "turns": 7, "error": null, "audit": 0, "seen": 0}
+{"task": "go-pig-latin", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1153256, "seconds": 739, "turns": 2, "error": null, "audit": 0, "seen": 0}
+{"task": "python-sgf-parsing", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.085187, "seconds": 26, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-protein-translation", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.0061829599999999995, "seconds": 732, "turns": 1, "error": null, "audit": 0, "cost2": 0.01053845, "seconds2": 17, "turns2": 3, "error2": null, "passed2": true, "seen": 0}
+{"task": "python-sgf-parsing", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1635548, "seconds": 24, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-simple-linked-list", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0809346, "seconds": 14, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-sgf-parsing", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.012482249999999999, "seconds": 50, "turns": 9, "error": null, "audit": 0, "seen": 0}
+{"task": "python-simple-linked-list", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00769067, "seconds": 26, "turns": 7, "error": null, "audit": 0, "seen": 3}
+{"task": "python-transpose", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.061975600000000006, "seconds": 12, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-simple-linked-list", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1590798, "seconds": 20, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-transpose", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.005195020000000001, "seconds": 19, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "python-transpose", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.12273300000000001, "seconds": 17, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-tree-building", "model": "sonnet", "effort": "medium", "rep": 0, "passed": false, "cost": 0.0785892, "seconds": 20, "turns": 3, "error": null, "audit": 0, "cost2": 0.1255044, "seconds2": 10, "turns2": 2, "error2": null, "passed2": true, "seen": 0}
+{"task": "go-react", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.11981419999999998, "seconds": 742, "turns": 1, "error": null, "audit": 0, "seen": 0}
+{"task": "python-variable-length-quantity", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00555803, "seconds": 17, "turns": 4, "error": null, "audit": 0, "seen": 0}
+{"task": "python-tree-building", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.14841700000000002, "seconds": 24, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-variable-length-quantity", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0688046, "seconds": 14, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-tree-building", "model": "haiku", "effort": "medium", "rep": 0, "passed": false, "cost": 0.00849076, "seconds": 37, "turns": 6, "error": null, "audit": 0, "cost2": 0.0132569, "seconds2": 20, "turns2": 3, "error2": null, "passed2": true, "seen": 0}
+{"task": "python-variable-length-quantity", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1234644, "seconds": 13, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-zebra-puzzle", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0695022, "seconds": 12, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-zebra-puzzle", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00579281, "seconds": 19, "turns": 6, "error": null, "audit": 0, "seen": 0}
+{"task": "python-zebra-puzzle", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.1246612, "seconds": 14, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-zipper", "model": "opus", "effort": "medium", "rep": 0, "passed": true, "cost": 0.153596, "seconds": 26, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "python-zipper", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.00795337, "seconds": 33, "turns": 7, "error": null, "audit": 0, "seen": 0}
+{"task": "python-zipper", "model": "sonnet", "effort": "medium", "rep": 0, "passed": true, "cost": 0.0723216, "seconds": 48, "turns": 3, "error": null, "audit": 0, "seen": 0}
+{"task": "go-two-bucket", "model": "haiku", "effort": "medium", "rep": 0, "passed": true, "cost": 0.012299879999999997, "seconds": 751, "turns": 2, "error": null, "audit": 0, "seen": 0}
