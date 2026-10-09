@@ -15,6 +15,9 @@ type World = {
   turns: number
   sent: string[]
   efforts: string[]
+  /** The session's cost ledger and five-hour window, as the status line reads them. */
+  spent: number
+  fiveHour: number
 }
 
 // The engine beneath the plugin: the session's model and context, the
@@ -27,14 +30,27 @@ function world(
   contextTokens = 1000,
   env: Record<string, string> = {},
 ): World {
-  const state: World = { asked: [], answer, contextTokens, turns: 0, sent: [], efforts: [] }
+  const state: World = {
+    asked: [],
+    answer,
+    contextTokens,
+    turns: 0,
+    sent: [],
+    efforts: [],
+    spent: 0,
+    fiveHour: 10,
+  }
   mock.env(on, env)
+  mock.store(on)
+  mock.clock(on, { now: 1_000_000 })
   on('session.model', () => ({ value: SESSION_MODEL }))
+  on('session.turns', () => ({ value: state.turns }))
   on('session.usage', () => ({
     value: {
       startedAt: 0,
       context: { tokens: state.contextTokens, window: 200000 },
-      rateLimits: [],
+      rateLimits: [{ kind: 'five_hour', percentUsed: state.fiveHour, resetsAt: '2026-10-09T12:00:00Z' }],
+      cost: { usd: state.spent },
     },
   }))
   on('tool.call', { tool: 'AskUserQuestion' }, ($, e) => {
@@ -62,15 +78,27 @@ function world(
   return state
 }
 
-// Runs the latest turn's first request, ends the turn, and answers which
+// Runs the latest turn's first request, ends the turn (with the API's
+// usage, the spend and the five-hour window moved on), and answers which
 // model the request was sent to.
-async function runTurn($: Engine, state: World): Promise<string | undefined> {
+const TURN_TOKENS = { input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 0, cache_creation_input_tokens: 20000 }
+async function runTurn($: Engine, state: World, isAborted = false): Promise<string | undefined> {
   const turnId = `t${state.turns}`
   for await (const _ of $.turn.step({ turnId, index: 0, model: SESSION_MODEL, messageCount: 1 })) {
     // drain
   }
-  await $.turn.complete({ turnId, answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
-  return state.sent.at(-1)
+  const model = state.sent.at(-1) ?? SESSION_MODEL
+  state.spent += 0.05
+  state.fiveHour += 1
+  await $.turn.complete({
+    turnId,
+    answer: '',
+    durationMs: 1,
+    isAborted,
+    reason: isAborted ? 'aborted' : 'answer',
+    usage: { model, ...TURN_TOKENS },
+  })
+  return model
 }
 
 const submit = (text: string) => ({ text, wait: false, origin: { kind: 'composer' as const } })
@@ -102,12 +130,33 @@ test('does not ask when the session model already fits', OPTIONS, async ($, on) 
   expect(await runTurn($, state)).toBe(SESSION_MODEL)
 })
 
-test('skips a downgrade once the context is large', OPTIONS, async ($, on) => {
+test('moves to Haiku even on a large context: it writes cache for less than Opus reads it', OPTIONS, async ($, on) => {
   const state = world($, on, 'Use Haiku for this prompt', 120000)
+  await $.prompt.submit(submit('ok do it'))
+  await runTurn($, state)
   await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+  expect(state.asked).toHaveLength(1)
+  expect(await runTurn($, state)).toBe(HAIKU)
+})
+
+test("doesn't offer Opus → Sonnet on a large context Opus has cached", OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Sonnet for this prompt', 120000)
+  await $.prompt.submit(submit('ok do it'))
+  await runTurn($, state)
+  await $.prompt.submit(submit('add a loading spinner to the submit button component'))
 
   expect(state.asked).toHaveLength(0)
   expect(await runTurn($, state)).toBe(SESSION_MODEL)
+  expect(state.efforts.at(-1)).toBe('medium')
+})
+
+test('offers Opus → Sonnet when the cache is cold anyway', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Sonnet for this prompt', 120000)
+  await $.prompt.submit(submit('add a loading spinner to the submit button component'))
+
+  expect(state.asked).toHaveLength(1)
+  expect(await runTurn($, state)).toBe('claude-sonnet-5-5')
 })
 
 test('auto-routes without asking after "Auto-route this session"', OPTIONS, async ($, on) => {
@@ -250,5 +299,108 @@ describe('the classifier', () => {
     const calls = classifierSays(on, 'haiku')
     await testPrompt($, 'what is the VAT on 12,500 baht?')
     expect(calls.count).toBe(0)
+  })
+})
+
+describe('the ledger', () => {
+  const presentation = { isFullscreen: false, columns: 80 }
+  const command = ($: Engine, args: string) =>
+    $.command.run({ command: 'clrouter', args, origin: { kind: 'composer' }, presentation })
+
+  test('records a routed turn and what staying would have cost', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    await runTurn($, state)
+
+    const { text } = await command($, 'stats')
+    expect(text).toContain('Sent to another model: 1 (Haiku 1)')
+    // 1,000 in, 500 out, 20,000 written to Haiku's cache: $0.00285. The
+    // session had no Opus turn yet, so its cache was cold too: $0.114.
+    expect(text).toContain('cost $0.003. On your session\'s model they\'d have cost at least $0.114: saved at least $0.111')
+    expect(text).toContain('Five-hour window used per turn: Haiku 1.0%')
+    expect(text).toContain('Asked 1 times: you switched 1, kept 0')
+  })
+
+  test("counts a warm cache on the session's model as reads", OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    await $.prompt.submit(submit('ok do it'))
+    await runTurn($, state)
+    state.answer = 'Use Haiku for this prompt'
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    await runTurn($, state)
+
+    // Opus ran a turn just before, so staying would have read the 20,000
+    // tokens from its cache: at least $0.018.
+    expect((await command($, 'stats')).text).toContain("they'd have cost at least $0.018: saved at least $0.015")
+  })
+
+  test('says so when there is nothing yet', OPTIONS, async ($, on) => {
+    world($, on, 'Keep Opus')
+    expect((await command($, 'stats')).text).toBe('CLRouter has no turns recorded in the last 7 days.')
+  })
+})
+
+describe('learning from answers', () => {
+  const ANSWERS = [
+    'what is a closure in JavaScript?',
+    'explain the difference between let and const',
+    'how does useEffect cleanup work?',
+    'what does HTTP 429 mean',
+  ]
+  const presentation = { isFullscreen: false, columns: 80 }
+
+  test('stops asking after two yeses for the same move', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    for (const prompt of ANSWERS.slice(0, 3)) {
+      await $.prompt.submit(submit(prompt))
+      await runTurn($, state)
+    }
+    expect(state.asked).toHaveLength(2)
+    expect(state.sent.at(-1)).toBe(HAIKU)
+  })
+
+  test('stops offering after three noes for the same move', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    for (const prompt of ANSWERS) {
+      await $.prompt.submit(submit(prompt))
+      await runTurn($, state)
+    }
+    expect(state.asked).toHaveLength(3)
+    expect(state.sent.at(-1)).toBe(SESSION_MODEL)
+    expect(state.efforts.at(-1)).toBe('low')
+  })
+
+  test('asks again after you interrupt a turn it routed on its own', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit(ANSWERS[0] ?? ''))
+    await runTurn($, state)
+    await $.prompt.submit(submit(ANSWERS[1] ?? ''))
+    await runTurn($, state)
+    await $.prompt.submit(submit(ANSWERS[2] ?? ''))
+    await runTurn($, state, true)
+    expect(state.asked).toHaveLength(2)
+
+    await $.prompt.submit(submit(ANSWERS[3] ?? ''))
+    expect(state.asked).toHaveLength(3)
+  })
+
+  test('forgets on /clrouter forget', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    for (const prompt of ANSWERS.slice(0, 2)) {
+      await $.prompt.submit(submit(prompt))
+      await runTurn($, state)
+    }
+    await $.command.run({ command: 'clrouter', args: 'forget', origin: { kind: 'composer' }, presentation })
+    await $.prompt.submit(submit(ANSWERS[2] ?? ''))
+    expect(state.asked).toHaveLength(3)
+  })
+
+  test('never asks on a call it is unsure of', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Sonnet for this prompt')
+    await $.prompt.submit(submit('the login button does nothing on mobile Safari, can you look into it'))
+
+    expect(state.asked).toHaveLength(0)
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+    expect(state.efforts.at(-1)).toBe('unset')
   })
 })

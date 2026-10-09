@@ -91,11 +91,67 @@ The [tax benchmark](bench/thai-tax#effort) is where these come from:
 
 **Known gap.** A question about a deep topic ("what's the trade-off between a monolith and microservices?") is treated like doing deep work: Opus at high.
 
-## The cost trade-off
+## Switching only when it costs less
 
-Per-prompt routing is not free. Your conversation is prompt-cached on the model you've been using. Another model has to read the whole context uncached. On a long conversation, sending a trivial question to Haiku can cost more than letting Opus answer it from cache.
+Your conversation is cached on the model you've been using. Another model has to write the whole conversation into its own cache before it answers. CLRouter prices both sides before moving a turn to a cheaper model:
 
-So CLRouter never offers a downgrade once the context passes `downgradeMaxContext` (30k tokens by default), and the question tells you when a switch will re-read a large context. Upgrades are always offered: when a task needs a stronger model, quality beats the cache.
+- **Staying** reads the context from cache, at the session model's output price. If that model hasn't run here within the hour, its cache is cold and it would write the context too.
+- **Moving** writes the context to the new model's cache, at the new model's output price.
+
+The output it expects comes from your own recent turns of the same kind of work, or from a default until there are five.
+
+Two facts follow from the [list prices](hooks/ledger.ts):
+
+- **Opus → Haiku always pays.** Haiku writes cache for less than Opus reads it.
+- **Opus → Sonnet mid-conversation rarely pays.** Opus 5.5 reads its cache at Sonnet's price, so Sonnet only wins on a small context or a long answer (break-even is around 30k tokens of context for an 8k-token answer). At the start of a conversation the cache is cold anyway, and Sonnet wins.
+
+So the savings come from three places:
+
+- starting conversations on the right model;
+- sending answers to Haiku;
+- the effort level.
+
+Mid-conversation switches between Opus and Sonnet aren't one of them. Moves to a stronger model are about quality and are always offered.
+
+## What it saved: `/clrouter stats`
+
+Every main turn is recorded on your machine (the last 1,500, in the plugin's own store): the kind of work, the model that answered, the effort, the tokens, the cost and the five-hour window used. `/clrouter stats [days]` sums it up (7 days by default):
+
+```
+CLRouter, last 7 days: 212 turns.
+- Sent to another model: 64 (Haiku 51, Sonnet 13). Effort only: 98. Left alone: 50.
+- Those turns cost $0.41. On your session's model they'd have cost at least $2.90: saved at least $2.49.
+- Five-hour window used per turn: Haiku 0.1%, Sonnet 0.8%, Opus 2.3%.
+- Asked 9 times: you switched 7, kept 2.
+```
+
+(Illustrative: your numbers will differ.)
+
+- **The saving is a floor.** For a routed turn, "staying" counts the context as cached on your session's model whenever it ran here within the hour. So the saving is never overstated.
+- **It can go negative.** If routing cost more than staying, the report says so.
+- **The money figures are API list prices,** whatever you pay.
+
+## Claude Pro and Max (the five-hour limit)
+
+It works the same way on a subscription: Claude Code switches the model and effort with your login.
+
+On a plan, what you spend isn't dollars but your usage window, so CLRouter records how much of the **five-hour window** each turn used. Claude Code reports that window on subscription logins. `/clrouter stats` then shows how much of the window an Opus, Sonnet or Haiku turn takes, measured on your own turns. That's the number that tells you how much further your window goes.
+
+What to know:
+
+- **Plans don't publish how each model counts against the window.** "About N% of a five-hour window saved" is an estimate. It assumes usage tracks API prices, calibrated on your own turns, and only appears after five turns with both readings.
+- **Other sessions share the window.** Turns from another session running at the same time land in the same reading.
+- **Models your plan doesn't include fall back.** If the routed model isn't available, the turn is re-sent on your session's model. That is tested with unknown model ids, not with a plan restriction.
+- **Not verified on a real subscription yet.** The window reading is tested against the engine's documented shape, not on a Pro account. If `/clrouter stats` never shows the five-hour line on yours, open an issue.
+
+## It learns your answers
+
+- **You switch the same way twice in a row** (say, answers on Opus → Haiku): it stops asking and switches.
+- **You keep your model three times in a row:** it stops offering that move.
+- **You interrupt a turn it switched on its own:** it takes the rule back and asks again.
+- **It isn't sure of a call:** it doesn't ask at all.
+
+`/clrouter` lists what it has learned, and `/clrouter forget` clears it.
 
 ## `/clrouter:dev`: a cascade with locked tests (experimental)
 
@@ -140,7 +196,6 @@ Set them in `/config` (each field is a row) or in `settings.json` under `pluginC
 | `haikuModel` | `haiku` | Model for simple prompts. Alias or full id. |
 | `sonnetModel` | `sonnet` | Model for routine prompts. |
 | `opusModel` | `opus` | Model for complex prompts. |
-| `downgradeMaxContext` | `30000` | No downgrade past this many context tokens. |
 
 Aliases are resolved to full ids by the plugin: `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` and `ANTHROPIC_DEFAULT_OPUS_MODEL` win when set (Bedrock, Vertex, gateways), otherwise `claude-haiku-5-5`, `claude-sonnet-5-5` and `claude-opus-5-5`. On any other provider or for newer models, put full ids in the three model options.
 
@@ -148,7 +203,9 @@ Aliases are resolved to full ids by the plugin: `ANTHROPIC_DEFAULT_HAIKU_MODEL`,
 
 | Command | |
 | --- | --- |
-| `/clrouter` | Mode, models, and the last routing decision. |
+| `/clrouter` | Mode, models, what it learned from your answers, and the last routing decision. |
+| `/clrouter stats [days]` | What routing cost and saved, and the five-hour window per model (7 days by default). |
+| `/clrouter forget` | Forget your answers: ask again for every kind of work. |
 | `/clrouter ask \| auto \| suggest \| off` | Set the mode for this session. |
 | `/clrouter reset` | Back to the configured mode. |
 | `/clrouter test <prompt>` | Show which tier a prompt gets and why, without sending it. |
@@ -187,6 +244,12 @@ CLRouter คือปลั๊กอินของ Claude Code ที่เล�
 - **Opus**: ออกแบบสถาปัตยกรรม ตรวจช่องโหว่ แก้ทั้ง codebase ย้ายระบบ บั๊กที่ข้ามหลาย service
 
 ถ้าไม่ตรงกับโมเดลที่ใช้อยู่ จะเด้งหน้าต่างถามแบบเดียวกับที่ Claude ถามกลับ เปลี่ยนแค่ prompt นั้น prompt ถัดไปกลับมาใช้โมเดลเดิม
+
+**ใช้กับ Claude Pro/Max (โควตา 5 ชั่วโมง) ได้** ระบบสลับโมเดลและ effort ผ่านบัญชีของคุณตามปกติ `/clrouter stats` จะบอกว่าแต่ละโมเดลกินโควตา 5 ชั่วโมงไปกี่ % ต่อ turn ซึ่งวัดจากการใช้งานจริงของคุณเอง ตัวเลข "ประหยัดโควตาไปประมาณ N%" เป็นค่าประมาณ เพราะแผนรายเดือนไม่ได้เปิดเผยว่าแต่ละโมเดลนับโควตาอย่างไร ส่วนนี้ยังไม่ได้ทดสอบบนบัญชี Pro จริง
+
+**สลับเฉพาะตอนที่ถูกกว่าจริง** (คิดรวมค่า cache): Opus → Haiku คุ้มเสมอ แต่ Opus → Sonnet กลางบทสนทนามักไม่คุ้ม เพราะค่าอ่าน cache ของ Opus 5.5 เท่ากับของ Sonnet เงินที่ประหยัดได้จริงจึงมาจาก 3 ทาง: เริ่มบทสนทนาด้วยโมเดลที่เหมาะ, ส่งงานตอบคำถามไป Haiku, และเลือก effort ให้เหมาะ
+
+**จำคำตอบของคุณ**: เลือกเปลี่ยนแบบเดิม 2 ครั้งติด จะเปลี่ยนให้เองไม่ถาม เลือกใช้โมเดลเดิม 3 ครั้งติด จะเลิกเสนอแบบนั้น ถ้ากดหยุด turn ที่มันเปลี่ยนให้เอง จะกลับไปถามใหม่ ล้างทั้งหมดได้ด้วย `/clrouter forget`
 
 **Effort ปรับให้เองทุก prompt** (ค่าเริ่มต้น `effort: auto`):
 

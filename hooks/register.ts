@@ -17,7 +17,20 @@ import {
   tierRank,
   tierTitle,
 } from './router'
-import type { Effort, Route, Tier } from './router'
+import type { Effort, Kind, Route, Tier } from './router'
+import {
+  LEDGER_MAX,
+  WARM_MS,
+  describeMove,
+  expectedOutput,
+  learn,
+  moveOf,
+  priced,
+  pricedOnSession,
+  summarize,
+  switchPays,
+} from './ledger'
+import type { Pref, TurnRecord } from './ledger'
 
 const MODES: readonly ClrouterMode[] = ['ask', 'auto', 'suggest', 'off']
 const JUDGES = ['heuristic', 'hybrid', 'model'] as const
@@ -48,12 +61,54 @@ type Config = {
   judge: Judge
   effort: EffortMode
   models: Record<Tier, string>
-  downgradeMaxContext: number
 }
 
-// A turn's route: the model to send it to (null keeps the session's) and
-// the effort to send it at (null keeps the session's).
-type Pending = { model: string | null; tier: Tier | null; effort: Effort | null }
+// A turn's route: the model to send it to (null keeps the session's), the
+// effort to send it at (null keeps the session's), and what the ledger
+// records about how the call was made.
+type Pending = {
+  model: string | null
+  tier: Tier | null
+  effort: Effort | null
+  kind: Kind
+  from: Tier | null
+  asked: boolean
+  accepted: boolean | null
+  /** The move a learned rule applied, so an interrupt can take it back. */
+  learnedMove: string | null
+}
+
+// The session's spend and five-hour window, as the status line has them.
+type Reading = { spent: number | null; fiveHour: number | null; resetsAt: string | null }
+
+const LEDGER_KEY = 'ledger'
+const PREFS_KEY = 'prefs'
+
+async function reading($: EngineInterface): Promise<Reading> {
+  try {
+    const usage = await $.session.usage()
+    const window = usage.rateLimits.find(w => w.kind === 'five_hour')
+    return {
+      spent: usage.cost?.usd ?? null,
+      fiveHour: window?.percentUsed ?? null,
+      resetsAt: window?.resetsAt ?? null,
+    }
+  } catch {
+    return { spent: null, fiveHour: null, resetsAt: null }
+  }
+}
+
+async function readLedger($: EngineInterface): Promise<TurnRecord[]> {
+  const value = await $.store.get(LEDGER_KEY)
+  return Array.isArray(value) ? (value as TurnRecord[]) : []
+}
+
+async function readPrefs($: EngineInterface): Promise<Record<string, Pref>> {
+  const value = await $.store.get(PREFS_KEY)
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, Pref>)
+    : {}
+}
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.find(one => one === value) ?? fallback
@@ -64,7 +119,6 @@ function readConfig(options: PluginOptions): Config {
     const value = options[key]
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback
   }
-  const max = options.downgradeMaxContext
 
   return {
     mode: pick(options.mode, MODES, 'ask'),
@@ -75,7 +129,6 @@ function readConfig(options: PluginOptions): Config {
       sonnet: model('sonnetModel', 'sonnet'),
       opus: model('opusModel', 'opus'),
     },
-    downgradeMaxContext: typeof max === 'number' && max >= 0 ? max : 30000,
   }
 }
 
@@ -151,6 +204,8 @@ async function judge(
   return heuristic === null ? null : { route: heuristic, judge: 'heuristic' }
 }
 
+type Answer = 'use' | 'keep' | 'other' | 'dismissed'
+
 /** Puts the choice to the person; resolves the tier to run on, or null to keep. */
 async function askPerson(
   $: EngineInterface,
@@ -158,7 +213,7 @@ async function askPerson(
   current: string,
   contextTokens: number,
   effort: Effort | null,
-): Promise<{ tier: Tier | null; mode?: ClrouterMode }> {
+): Promise<{ tier: Tier | null; answer: Answer; mode?: ClrouterMode }> {
   const target = tierTitle(recommended.tier)
   const keep = modelTitle(current)
   const why = recommended.reasons.slice(0, 2).join(', ')
@@ -180,39 +235,129 @@ async function askPerson(
     )
   } catch {
     // Dismissed, or nobody to ask (a -p run): leave the model alone.
-    return { tier: null }
+    return { tier: null, answer: 'dismissed' }
   }
 
   if (answer === useLabel) {
-    return { tier: recommended.tier }
+    return { tier: recommended.tier, answer: 'use' }
   }
   if (answer === autoLabel) {
-    return { tier: recommended.tier, mode: 'auto' }
+    return { tier: recommended.tier, answer: 'use', mode: 'auto' }
   }
   if (answer === offLabel) {
-    return { tier: null, mode: 'off' }
+    return { tier: null, answer: 'other', mode: 'off' }
   }
   if (answer === keepLabel) {
-    return { tier: null }
+    return { tier: null, answer: 'keep' }
   }
 
-  return { tier: tierInText(answer) ?? null }
+  return { tier: tierInText(answer) ?? null, answer: 'other' }
+}
+
+/**
+ * Whether the session's model has this conversation cached: it ran a turn
+ * here within the hour. A conversation continued or resumed in a new
+ * process has earlier turns this process never saw; then the last ledger
+ * row within the hour stands in, so a saving is never overstated.
+ */
+async function isCacheWarm($: EngineInterface, warmSince: number | null, now: number): Promise<boolean> {
+  if (warmSince !== null) {
+    return now - warmSince < WARM_MS
+  }
+  if ((await $.session.turns()) <= 1) {
+    return false
+  }
+  const last = (await readLedger($)).at(-1)
+  return last !== undefined && now - last.at < WARM_MS
+}
+
+// One ledger row per main turn: what it cost, what staying would have
+// cost, and how much of the five-hour window it used.
+async function keepRecord(
+  $: EngineInterface,
+  config: Config,
+  warmSince: number | null,
+  e: { usage?: { model: string; input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }; isAborted: boolean },
+  route: Pending | null,
+  start: Reading,
+): Promise<TurnRecord> {
+  const end = await reading($)
+  const now = await $.clock.now()
+  const isWarm = await isCacheWarm($, warmSince, now)
+  const usage = e.usage
+  const tokens =
+    usage === undefined
+      ? null
+      : {
+          input: usage.input_tokens,
+          output: usage.output_tokens,
+          cacheRead: usage.cache_read_input_tokens,
+          cacheWrite: usage.cache_creation_input_tokens,
+        }
+  const from = route?.from ?? tierOfModel(await $.session.model(), config.models) ?? null
+  const ran = usage === undefined ? null : (tierOfModel(usage.model, config.models) ?? null)
+  const routed = route !== null && route.tier !== null && ran === route.tier
+  const window =
+    start.fiveHour !== null &&
+    end.fiveHour !== null &&
+    start.resetsAt === end.resetsAt &&
+    end.fiveHour >= start.fiveHour
+      ? Math.round((end.fiveHour - start.fiveHour) * 10) / 10
+      : null
+
+  const row: TurnRecord = {
+    at: now,
+    kind: route?.kind ?? null,
+    from,
+    ran,
+    routed,
+    effort: route?.effort ?? null,
+    asked: route?.asked ?? false,
+    accepted: route?.accepted ?? null,
+    aborted: e.isAborted,
+    usd: tokens !== null && ran !== null ? priced(tokens, ran) : 0,
+    would:
+      routed && tokens !== null && from !== null
+        ? isWarm
+          ? pricedOnSession(tokens, from)
+          : priced(tokens, from)
+        : null,
+    quota: window,
+    spent: start.spent !== null && end.spent !== null ? Math.max(0, end.spent - start.spent) : null,
+    out: tokens?.output ?? null,
+  }
+  const ledger = await readLedger($)
+  await $.store.set(LEDGER_KEY, [...ledger, row].slice(-LEDGER_MAX))
+
+  // An interrupt on a turn a learned rule routed: the rule was wrong here.
+  if (e.isAborted && route?.learnedMove != null) {
+    const prefs = await readPrefs($)
+    const { [route.learnedMove]: _, ...rest } = prefs
+    await $.store.set(PREFS_KEY, rest)
+    $.ui.toast(`CLRouter asks again before ${describeMove(route.learnedMove)}.`)
+  }
+
+  return row
 }
 
 export const register: Register = (on, options) => {
   const config = readConfig(options)
 
-  // The route chosen at submit, waiting for its turn to start; then the
-  // routes of turns in flight, by turn id. Plain variables: a route only
-  // lives as long as its turn.
+  // The route chosen at submit, waiting for its turn to start; the routes
+  // of turns in flight, by turn id; and each main turn's opening reading
+  // for the ledger. Plain variables: they live as long as a turn.
   let pending: Pending | null = null
   const routes = new Map<string, Pending>()
+  const turns = new Map<string, { route: Pending | null; start: Reading }>()
+  // When a main turn last ran on the session's own model: its cache is warm
+  // for an hour after, which decides what staying would have cost.
+  let warmSince: number | null = null
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'clrouter',
-      description: 'Model router: show status, set the mode, or test a prompt',
-      argumentHint: '[ask|auto|suggest|off|reset|test <prompt>]',
+      description: 'Model router: status, savings, mode, or test a prompt',
+      argumentHint: '[stats [days]|ask|auto|suggest|off|reset|forget|test <prompt>]',
     })
 
     return next(e)
@@ -228,48 +373,84 @@ export const register: Register = (on, options) => {
       return next(e)
     }
 
+    // A call the router isn't sure of changes nothing: no popup, no switch.
     const verdict = await judge($, e.text, config)
-    if (verdict === null) {
+    if (verdict === null || verdict.route.confidence === 'low') {
       return next(e)
     }
 
     const recommended = verdict.route
     const current = await $.session.model()
-    const currentTier = tierOfModel(current, config.models)
+    const currentTier = tierOfModel(current, config.models) ?? null
     const isEffortAuto = config.effort === 'auto' && mode !== 'suggest'
 
     // The tier to switch this turn to; null keeps the session's model.
     let tier: Tier | null = null
+    let asked = false
+    let accepted: boolean | null = null
+    let learnedMove: string | null = null
     if (currentTier !== recommended.tier) {
-      // A cheaper model reads the whole conversation uncached: past a point
-      // that costs more than the cached read on the current model saves.
+      // A cheaper model re-reads the whole conversation into its own cache.
+      // Move only when that, plus its cheaper output, costs less than
+      // staying on the session's model. Upgrades are about quality: always.
       const { context } = await $.session.usage()
       const contextTokens = context.tokens ?? 0
-      const isDowngrade =
-        currentTier !== undefined && tierRank(recommended.tier) < tierRank(currentTier)
-      if (!(isDowngrade && contextTokens > config.downgradeMaxContext)) {
+      const isCheaper =
+        currentTier !== null && tierRank(recommended.tier) < tierRank(currentTier)
+      const isWarm = await isCacheWarm($, warmSince, await $.clock.now())
+      const pays =
+        !isCheaper ||
+        currentTier === null ||
+        switchPays(
+          currentTier,
+          recommended.tier,
+          contextTokens,
+          expectedOutput(await readLedger($), recommended.kind),
+          isWarm,
+        )
+      const move = moveOf(recommended.kind, currentTier, recommended.tier)
+      if (pays) {
         if (mode === 'suggest') {
           $.ui.toast(
             `${tierTitle(recommended.tier)} fits this one: ${recommended.reasons[0]}. /model to switch.`,
           )
-        } else if (mode === 'ask') {
-          const offered = isEffortAuto ? effortFor(recommended.kind, recommended.tier) : null
-          const choice = await askPerson($, recommended, current, contextTokens, offered)
-          tier = choice.tier
-          if (choice.mode !== undefined) {
-            await update($, sessionMode, () => choice.mode ?? null)
-          }
-          if (choice.mode === 'off') {
-            return next(e)
-          }
-        } else {
+        } else if (mode === 'auto') {
           tier = recommended.tier
+        } else {
+          // Ask, unless the person's answers already settled this move.
+          const prefs = await readPrefs($)
+          const rule = prefs[move]?.rule ?? null
+          if (rule === 'auto') {
+            tier = recommended.tier
+            learnedMove = move
+          } else if (rule === null) {
+            const offered = isEffortAuto ? effortFor(recommended.kind, recommended.tier) : null
+            const choice = await askPerson($, recommended, current, contextTokens, offered)
+            asked = choice.answer !== 'dismissed'
+            tier = choice.tier
+            if (choice.answer === 'use' || choice.answer === 'keep') {
+              accepted = choice.answer === 'use'
+              const after = learn(prefs[move], accepted)
+              await $.store.set(PREFS_KEY, { ...prefs, [move]: after })
+              if (after.rule === 'auto') {
+                $.ui.toast(`From now on, ${describeMove(move)} without asking. /clrouter forget undoes it.`)
+              } else if (after.rule === 'never') {
+                $.ui.toast(`CLRouter stops offering ${describeMove(move)}. /clrouter forget undoes it.`)
+              }
+            }
+            if (choice.mode !== undefined) {
+              await update($, sessionMode, () => choice.mode ?? null)
+            }
+            if (choice.mode === 'off') {
+              return next(e)
+            }
+          }
         }
       }
     }
 
     // The effort fits the work and the model that will actually run it.
-    const effort = isEffortAuto ? effortFor(recommended.kind, tier ?? currentTier) : null
+    const effort = isEffortAuto ? effortFor(recommended.kind, tier ?? currentTier ?? undefined) : null
     const model = tier === null ? null : await resolveModel($, config.models[tier])
     const decision: ClrouterDecision = {
       prompt: firstLine(typedText(e.text)),
@@ -282,11 +463,7 @@ export const register: Register = (on, options) => {
     }
     await update($, lastDecision, () => decision)
 
-    if (model === null && effort === null) {
-      return next(e)
-    }
-
-    pending = { model, tier, effort }
+    pending = { model, tier, effort, kind: recommended.kind, from: currentTier, asked, accepted, learnedMove }
     try {
       return await next(e)
     } finally {
@@ -295,10 +472,14 @@ export const register: Register = (on, options) => {
   })
 
   // Raised for the main loop alone, inside the submit's `next`.
-  on('turn.start', ($, e, next) => {
-    if (pending !== null) {
-      const { model, tier, effort } = pending
-      routes.set(e.turnId, pending)
+  on('turn.start', async ($, e, next) => {
+    const route = pending
+    pending = null
+    turns.set(e.turnId, { route, start: await reading($) })
+
+    if (route !== null && (route.model !== null || route.effort !== null)) {
+      const { model, tier, effort } = route
+      routes.set(e.turnId, route)
       const at = effort === null ? '' : ` at ${effort} effort`
       $.ui.status(
         tier === null ? `CLRouter: ${effort} effort` : `CLRouter → ${tierTitle(tier)}${effort === null ? '' : ` · ${effort}`}`,
@@ -306,12 +487,10 @@ export const register: Register = (on, options) => {
       if (model !== null) {
         $.ui.log(`CLRouter: this prompt runs on ${model}${at}`)
       }
-      pending = null
     }
 
     return next(e)
   })
-
   on('turn.step', async function* ($, e, next) {
     const routed = e.agentId === undefined ? routes.get(e.turnId) : undefined
     if (routed === undefined) {
@@ -343,12 +522,28 @@ export const register: Register = (on, options) => {
     return yield* next({ ...e, ...effort })
   })
 
-  on('turn.complete', ($, e, next) => {
-    if (e.agentId === undefined && routes.delete(e.turnId)) {
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId !== undefined) {
+      return next(e)
+    }
+    if (routes.delete(e.turnId)) {
       $.ui.status(undefined)
     }
+    const turn = turns.get(e.turnId)
+    turns.delete(e.turnId)
 
-    return next(e)
+    const result = await next(e)
+    if (turn !== undefined) {
+      try {
+        const row = await keepRecord($, config, warmSince, e, turn.route, turn.start)
+        if (!row.routed && row.ran !== null && row.ran === row.from) {
+          warmSince = row.at
+        }
+      } catch (error) {
+        $.ui.log(`clrouter: ledger not written (${String(error)})`, { to: 'debug' })
+      }
+    }
+    return result
   })
 
   on('command.run', { command: 'clrouter' }, async ($, e) => {
@@ -370,6 +565,16 @@ export const register: Register = (on, options) => {
       }
     }
 
+    if (verb === 'stats') {
+      const days = Math.max(1, Math.round(Number(rest[0] ?? 7)) || 7)
+      return { text: summarize(await readLedger($), await $.clock.now(), days) }
+    }
+
+    if (verb === 'forget') {
+      await $.store.delete(PREFS_KEY)
+      return { text: 'CLRouter forgot your answers: it asks again for every kind of work.' }
+    }
+
     if (verb === 'reset') {
       await update($, sessionMode, () => null)
       return { text: `CLRouter mode reset to the configured one: ${config.mode}.` }
@@ -382,7 +587,7 @@ export const register: Register = (on, options) => {
     }
 
     if (verb !== '' && verb !== 'status') {
-      return { text: `Unknown: "${verb}". Try /clrouter [ask|auto|suggest|off|reset|test <prompt>].` }
+      return { text: `Unknown: "${verb}". Try /clrouter [stats [days]|ask|auto|suggest|off|reset|forget|test <prompt>].` }
     }
 
     const mode = (await read($, sessionMode)) ?? config.mode
@@ -397,6 +602,11 @@ export const register: Register = (on, options) => {
       lines.push(
         `Last call: "${last.prompt}" (${last.chars.typed} of ${last.chars.sent} chars scored) → ${last.recommended} (${last.reasons.join(', ')}), ${last.routedTo === null ? 'kept the session model' : `ran on ${last.routedTo}`}${last.effort === null ? '' : ` at ${last.effort} effort`}.`,
       )
+    }
+
+    const rules = Object.entries(await readPrefs($)).filter(([, pref]) => pref.rule !== null)
+    for (const [move, pref] of rules) {
+      lines.push(`Learned: ${describeMove(move)} ${pref.rule === 'auto' ? 'without asking' : 'is no longer offered'}.`)
     }
 
     return { text: lines.join('\n') }

@@ -1,6 +1,6 @@
 {
   "name": "clrouter",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Routes each prompt to the model and effort that fit its work, and runs dev tasks through a cascade where the cheapest model codes against locked acceptance tests.",
   "author": {
     "name": "thanyatornklin19"
@@ -68,12 +68,6 @@
       "title": "Model for complex prompts",
       "description": "Alias or full model id.",
       "default": "opus"
-    },
-    "downgradeMaxContext": {
-      "type": "number",
-      "title": "Max context for a downgrade",
-      "description": "Skip routing to a cheaper model once the conversation holds more tokens than this: re-reading it uncached costs more than it saves.",
-      "default": 30000
     }
   }
 }
