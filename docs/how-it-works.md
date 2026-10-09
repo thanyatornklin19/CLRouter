@@ -9,7 +9,7 @@ The rules come from the benchmarks in [`bench/`](../bench/), not from a hunch:
 | Model | Work it gets | Why |
 | --- | --- | --- |
 | **Haiku** | Answering and explaining, translating, summarizing, short writing (an email, a caption), typos, renames, formatting | Cheap and good at these. It never gets code to build, because it built a polished tax page with wrong legal caps, twice. |
-| **Sonnet** | Building or changing code, and anything with **exact rules**: tax, VAT, payroll, interest, loans, insurance, law, in Thai or English | On the tax app it was right 2 of 2 at $0.16. Opus was right 1 of 2 at $0.51. |
+| **Sonnet** | Building or changing code, and anything with **exact rules**: tax, VAT, payroll, interest, loans, insurance, law, in Thai or English | On the tax app it was right 2 of 2 at $0.16; Opus missed a rule in 2 of 3 runs at $0.51 to $0.56. Too few runs to rank them, so the case for Sonnet is the price. |
 | **Opus** | Architecture and system design, security audits, codebase-wide changes, migrations, bugs that span several services | Where the hard part is deciding, not typing. This tier is a judgment: no benchmark has measured it yet. |
 
 Exact rules have a **floor**. A prompt about tax or money never goes below Sonnet, whether it asks for code or just a number ("what is the VAT on 12,500 baht?").

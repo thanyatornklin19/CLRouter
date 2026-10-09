@@ -26,13 +26,13 @@ Running Opus at high effort on every prompt is the expensive default. CLRouter p
 
 One task, a Thai income tax web app, given to each model and scored by 20 hidden tests:
 
-| Model and effort | Cost | Hidden tests | Note |
-| :-- | --: | :-: | :-- |
-| Opus · high | $0.56 | 19/20 | |
-| **Sonnet · medium** | **$0.16** | **20/20** | |
-| Haiku · medium | $0.07 | 18/20 | The page looked finished, but the tax was wrong. |
+| Model and effort | Runs | Cost | Hidden tests | Note |
+| :-- | :-: | --: | :-- | :-- |
+| Opus · high | 1 | $0.56 | 19/20 | |
+| Sonnet · medium | 2 | $0.16 | 20/20, 20/20 | |
+| Haiku · medium | 2 | $0.07 | 18/20, 19/20 | Wrong in both runs, behind a page that looked finished. |
 
-So code goes to Sonnet, answers go to Haiku, and tax or money rules never go to Haiku. [All results →](bench/thai-tax)
+This doesn't rank Opus against Sonnet. Opus missed a rule in 2 of its 3 runs and Sonnet in none of its 5 (at any effort), which is suggestive but not established: a gap that size appears by chance about one time in ten. What it does show is that Sonnet cost a third as much, and that Haiku got a tax rule wrong every time. So code defaults to Sonnet, answers go to Haiku, and tax or money rules never go to Haiku. The task and its tests were written by the author; [what is checked and what isn't](bench/thai-tax/RULES.md), and [how the next round will be run](bench/PROTOCOL.md). [All results →](bench/thai-tax)
 
 ## Install
 

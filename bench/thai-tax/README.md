@@ -4,6 +4,8 @@ One task, given word for word to every approach: build a web page that calculate
 
 The task names the deductions but not their caps or the tax rates. The model has to know Thai tax law, and that is where cheap models slip.
 
+> **Author-written.** The task, the hidden tests and the reference were all written by the router's author. The rules behind the tests were looked up afterwards, but not against the primary documents: see [`RULES.md`](RULES.md) for what is checked and what isn't. The next round follows [`../PROTOCOL.md`](../PROTOCOL.md).
+
 ## How it is scored
 
 - **Hidden tests** ([`hidden-tests.mjs`](hidden-tests.mjs)): 20 tests of `calculateTax` that no model sees. They check every cap, every bracket boundary, the second-child rule, refunds and a full return.
@@ -33,7 +35,7 @@ Per-run detail is in [`results.json`](results.json).
   - run 2 didn't cap parents' health insurance at 15,000.
 
   A person using the page would never know.
-- **Opus was not safer.** Its second run missed the provident fund's 15% cap.
+- **Opus was not shown to be safer.** It missed the provident fund's 15% cap in 2 of its 3 runs. That is too few runs to rank it against Sonnet.
 - **Locked tests work.** In every cascade run, the code that passed was written by **Haiku**, and every one scored 20/20, against 18 and 19 for Haiku alone. The tests carried the tax rules Haiku didn't know, and the lock stopped it from editing them to pass.
 - **The cascade didn't save money on a task this size.**
   - Writing the tests costs about as much as writing the code. With Opus writing them, they cost more than Opus doing the whole job.
