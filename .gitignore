@@ -5,3 +5,4 @@ node_modules/
 
 # Benchmark runs (bench/*/run.sh)
 bench/*/runs/
+__pycache__/
