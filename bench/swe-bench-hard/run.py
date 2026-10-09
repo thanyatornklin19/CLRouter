@@ -411,7 +411,7 @@ def do_task(task: dict, arms: list[dict], out: pathlib.Path, args, rows: list[di
             with LOCK, (out / 'gold.jsonl').open('a') as f:
                 f.write(json.dumps(gold[iid]) + '\n')
             print(f"gold    {iid:30} {'ok' if gold[iid]['ok'] else 'EXCLUDED'} v{tinfo['version']} {g.get('f2p')} {g.get('p2p')} "
-                  f"null patch {'RESOLVED' if null else 'fails'} {g.get('grade_error') or ''}", flush=True)
+                  f"null patch {'not run' if null is None else 'RESOLVED' if null else 'fails'} {g.get('grade_error') or ''}", flush=True)
             if not gold[iid]['ok'] or args.gold_only:
                 return
         for arm, rep in todo:
@@ -441,12 +441,32 @@ def routes(tasks: list[dict]) -> dict:
     return json.loads(r.stdout)
 
 
-def summarize(rows: list[dict], gold: dict, arms: list[dict], verdicts: dict) -> str:
+def added_lines(patch: str) -> list[str]:
+    return [line[1:].strip() for line in patch.splitlines()
+            if line.startswith('+') and not line.startswith('+++') and line[1:].strip()]
+
+
+def recall(upstream: str, model: str) -> tuple[float, int, int]:
+    """How much of the maintainers' fix the model wrote word for word.
+
+    Returns the share of the fix's added lines found verbatim among the
+    model's added lines, and how many of the fix's added comment lines (five
+    or more words) the model reproduced, out of how many there are. Tests
+    can't make a model word a comment the same way, so a verbatim comment
+    points to memory of the fix rather than to working it out.
+    """
+    fix, mine = added_lines(upstream), set(added_lines(model))
+    comments = [line for line in fix if line.startswith('#') and len(line.split()) >= 6]
+    share = sum(line in mine for line in fix) / len(fix) if fix else 0.0
+    return share, sum(c in mine for c in comments), len(comments)
+
+
+def summarize(rows: list[dict], gold: dict, arms: list[dict], verdicts: dict, tasks: dict, out: pathlib.Path) -> str:
     labels = [a['label'] for a in arms]
     complete = sorted(t for t in {r['task'] for r in rows} if all(any(r['task'] == t and r['arm'] == a for r in rows) for a in labels))
     rows = [r for r in rows if r['task'] in complete]
     excluded = sorted(t for t, g in gold.items() if not g['ok'])
-    lines = [f'Tasks graded on every arm: {len(complete)}. Excluded before any model ran (reference fix failed here): {len(excluded)}'
+    lines = [f'Tasks graded on every arm: {len(complete)}. Excluded before any model ran (image check or grader controls failed): {len(excluded)}'
              + (f" ({', '.join(excluded)})" if excluded else '') + '.', '',
              '| Arm | Runs | Resolved (95% CI) | Mean cost | Cost per resolved | Mean time | Errors | Denied cmds | Touched | Seen | Net |',
              '| --- | --: | --- | --: | --: | --: | --: | --: | --: | --: | --: |']
@@ -496,6 +516,20 @@ def summarize(rows: list[dict], gold: dict, arms: list[dict], verdicts: dict) ->
     solved = [b for b in best.values() if b]
     lines.append(f'- Cheapest arm that resolved each task (no router can beat this): {len(solved)}/{len(complete)}, '
                  f'${sum(b[0] for b in solved) / max(1, len(complete)):.2f} per task (unresolved tasks counted at $0)')
+
+    lines += ['', "Recall of the maintainers' fix (verbatim lines in the model's patch):", '']
+    for a in labels:
+        got = []
+        for r in (r for r in rows if r['arm'] == a):
+            pf = out / 'patches' / f"{r['task']}.{a}.{r['rep']}.diff.gz"
+            if pf.exists():
+                with gzip.open(pf, 'rt') as f:
+                    got.append((r['resolved'], *recall(tasks[r['task']]['patch'], f.read())))
+        if got:
+            with_comments = [g for g in got if g[3]]
+            lines.append(f"- {a}: {sum(g[1] for g in got) / len(got):.0%} of the fix's added lines on average; "
+                         f"reproduced at least one of the fix's comments word for word in {sum(1 for g in with_comments if g[2])} "
+                         f"of the {len(with_comments)} runs whose fix adds a comment")
 
     errors = [r for r in rows if r['error'] or r['grade_error']]
     if errors:
@@ -554,7 +588,7 @@ def main() -> None:
         with ThreadPoolExecutor(args.jobs) as pool_:
             list(pool_.map(lambda iid: do_task(tasks[iid], arms, out, args, rows, gold, state), order))
 
-    summary = summarize(rows, gold, arms, routes([tasks[t] for t in {r['task'] for r in rows}]))
+    summary = summarize(rows, gold, arms, routes([tasks[t] for t in {r['task'] for r in rows}]), tasks, out)
     (out / 'summary.md').write_text(summary + '\n')
     print('\n' + summary)
 
