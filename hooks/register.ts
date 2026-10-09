@@ -8,6 +8,7 @@ import {
   modelTitle,
   route,
   tierInText,
+  typedText,
   tierOfLabel,
   tierOfModel,
   tierRank,
@@ -106,7 +107,7 @@ async function judge(
 
   try {
     const label = await $.model.classify(
-      `A user sent this request to an AI coding assistant:\n\n${text.slice(0, CLASSIFIER_CHARS)}`,
+      `A user sent this request to an AI coding assistant:\n\n${typedText(text).slice(0, CLASSIFIER_CHARS)}`,
       TIERS.map(tier => CLASSIFIER_LABELS[tier]),
     )
     const tier = tierOfLabel(label)
@@ -241,7 +242,8 @@ export const register: Register = (on, options) => {
 
     const model = tier === null ? null : await resolveModel($, config.models[tier])
     const decision: ClrouterDecision = {
-      prompt: firstLine(e.text),
+      prompt: firstLine(typedText(e.text)),
+      chars: { typed: typedText(e.text).length, sent: e.text.length },
       recommended: recommended.tier,
       reasons: recommended.reasons,
       judge: verdict.judge,
@@ -351,7 +353,7 @@ export const register: Register = (on, options) => {
     ]
     if (last !== null) {
       lines.push(
-        `Last call: "${last.prompt}" → ${last.recommended} (${last.reasons.join(', ')}), ${last.routedTo === null ? 'kept the session model' : `ran on ${last.routedTo}`}.`,
+        `Last call: "${last.prompt}" (${last.chars.typed} of ${last.chars.sent} chars scored) → ${last.recommended} (${last.reasons.join(', ')}), ${last.routedTo === null ? 'kept the session model' : `ran on ${last.routedTo}`}.`,
       )
     }
 

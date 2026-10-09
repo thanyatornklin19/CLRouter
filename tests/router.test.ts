@@ -47,6 +47,14 @@ describe('route', () => {
     }
   })
 
+  test('scores only what was typed, not the host\'s wrapped blocks', async () => {
+    const brief = 'Design the architecture and plan the migration. '.repeat(100)
+    const wrapped = `<system-reminder>\n${brief}\n</system-reminder>\nyo`
+    expect(route(wrapped)?.tier).toBe('haiku')
+    expect(route(`<system-reminder>${brief}</system-reminder>\nok do it`)).toBeNull()
+    expect(route(`<ide_selection>${brief}</ide_selection>`)).toBeNull()
+  })
+
   test('never puts pasted code on Haiku by keywords alone', async () => {
     const verdict = route('what is wrong here?\n```py\nprint(1\n```')
     expect(verdict?.tier).toBe('sonnet')

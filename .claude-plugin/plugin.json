@@ -1,12 +1,21 @@
 {
   "name": "clrouter",
-  "version": "0.1.0",
-  "description": "Routes each prompt to the model that fits it (Haiku, Sonnet or Opus) and asks before switching.",
-  "author": { "name": "thanyatornklin19" },
+  "version": "0.2.0",
+  "description": "Routes each prompt to the model that fits it, and runs dev work as a plan/build/review pipeline with a model per role.",
+  "author": {
+    "name": "thanyatornklin19"
+  },
   "homepage": "https://github.com/thanyatornklin19/CLRouter",
   "repository": "https://github.com/thanyatornklin19/CLRouter",
   "license": "MIT",
-  "keywords": ["model", "router", "haiku", "sonnet", "opus", "cost"],
+  "keywords": [
+    "model",
+    "router",
+    "haiku",
+    "sonnet",
+    "opus",
+    "cost"
+  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "mode": {
@@ -14,14 +23,23 @@
       "title": "Mode",
       "description": "ask: pop up before switching; auto: switch silently; suggest: only say which model fits; off: do nothing.",
       "default": "ask",
-      "options": ["ask", "auto", "suggest", "off"]
+      "options": [
+        "ask",
+        "auto",
+        "suggest",
+        "off"
+      ]
     },
     "judge": {
       "type": "string",
       "title": "Judge",
       "description": "heuristic: keywords only, free and instant; hybrid: ask the small fast model when the keywords are unsure; model: always ask it.",
       "default": "hybrid",
-      "options": ["heuristic", "hybrid", "model"]
+      "options": [
+        "heuristic",
+        "hybrid",
+        "model"
+      ]
     },
     "haikuModel": {
       "type": "string",

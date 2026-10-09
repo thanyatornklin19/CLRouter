@@ -98,7 +98,7 @@ const SIMPLE: readonly Signal[] = [
     label: 'wording / typo fix',
   },
   {
-    pattern: /^(hi|hello|hey|thanks|thank you|thx)\b|^สวัสดี|^ขอบคุณ/i,
+    pattern: /^(hi|hello|hey|yo|sup|thanks|thank you|thx)\b|^สวัสดี|^หวัดดี|^ขอบคุณ/i,
     weight: 2,
     label: 'small talk',
   },
@@ -130,6 +130,17 @@ const STANDARD =
 const FOLLOW_UP =
   /^(y(es)?|yep|yeah|ok(ay)?|sure|go( ahead| on)?|continue|proceed|do it|lgtm|sounds good|next|ต่อ(เลย)?|ทำต่อ|ไปต่อ|ได้(เลย)?|โอเค|ตกลง|ใช่)[\s.!]*$/i
 
+// Hosts wrap the typed prompt in blocks of their own (a reminder, the IDE's
+// selection, a command's echo). Those are not the person's words: scored,
+// a two-letter "yo" reads as a four-thousand-character brief.
+const HARNESS_BLOCK =
+  /<(system-reminder|local-command-[a-z]+|command-[a-z]+|ide_[a-z_]+|user-prompt-submit-hook)\b[^>]*>[\s\S]*?<\/\1>/gi
+
+/** The prompt as the person typed it, the host's own blocks taken out. */
+export function typedText(text: string): string {
+  return text.replace(HARNESS_BLOCK, '').trim()
+}
+
 const CODE_FENCE = /```/g
 const FILE_PATH =
   /(?:[\w.-]+\/)+[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|rb|cs|cpp|c|h|kt|swift|php|sql|ya?ml|json|toml|md|vue|svelte)\b/gi
@@ -148,7 +159,7 @@ const OPUS_AT_LEAST = 3
  * that only makes sense against the conversation).
  */
 export function route(text: string): Route | null {
-  const prompt = text.trim()
+  const prompt = typedText(text)
   if (prompt === '' || prompt.startsWith('/') || FOLLOW_UP.test(prompt)) {
     return null
   }

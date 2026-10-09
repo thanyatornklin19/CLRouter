@@ -46,6 +46,34 @@ Per-prompt routing is not free. Your conversation is prompt-cached on the model 
 
 So CLRouter never offers a downgrade once the context passes `downgradeMaxContext` (30k tokens by default), and the question tells you when a switch will re-read a large context. Upgrades are always offered: when a task needs a stronger model, quality beats the cache.
 
+## `/clrouter:dev`: a pipeline with a model per role (experimental)
+
+```
+/clrouter:dev Add rate limiting to the /login endpoint, with tests
+```
+
+| Stage | Agent | Model | Why that model |
+| --- | --- | --- | --- |
+| Plan | `clrouter:planner` (read-only) | Opus | Decisions are where mistakes are expensive. |
+| Build | `clrouter:coder` | Sonnet | Writing code to a clear plan doesn't need the top tier. |
+| Review | `clrouter:reviewer` (read-only) | Opus | It reads the real `git diff`, not the coder's report. |
+| Fix | `clrouter:coder` | Sonnet | Applies the numbered fixes. At most 2 review rounds. |
+| Dispatch and summary | the command itself | Haiku | It only passes text between stages and sums up. |
+
+Each stage starts in a fresh context, so the expensive model never re-reads your whole conversation.
+
+**Measured, not assumed.** One small task (an `isPrime` function with tests, in a two-file repo), run once each:
+
+| How | Cost | Result |
+| --- | --- | --- |
+| Sonnet alone | $0.07 | works, 5 tests |
+| Opus alone | $0.14 | works, 8 tests |
+| `/clrouter:dev` | $0.81 | works, 8 tests, review approved |
+
+88% of the pipeline's cost was the two Opus stages, each exploring the code from scratch. Every stage has a fixed overhead: it reads the codebase, writes a plan or a review, and starts a new cache. On a small task that overhead is the whole bill. The pipeline pays off only when the task is big enough that Sonnet writing most of the code saves more than planning and review cost, or when a review catches a bug that would cost more to find later. For a small task, use one model.
+
+To change a stage's model, edit `model:` in `agents/*.md` or `commands/dev.md`.
+
 ## Settings
 
 Set them in `/config` (each field is a row) or in `settings.json` under `pluginConfigs.clrouter.options`.
@@ -86,6 +114,7 @@ Layout:
 
 - `hooks/router.ts`: the heuristic scorer. Pure functions; tune the signals here.
 - `hooks/register.ts`: the hooks (prompt, turn, command) and the dialog.
+- `agents/`, `commands/dev.md`: the `/clrouter:dev` pipeline's stages.
 - `types/index.d.ts`: the session state the plugin keeps.
 - `tests/`: `claude plugin test` suites.
 
@@ -110,6 +139,10 @@ CLRouter คือปลั๊กอินของ Claude Code ที่เล�
 - การเปลี่ยนโมเดลกลางบทสนทนามีต้นทุน: โมเดลใหม่ต้องอ่าน context ทั้งหมดโดยไม่มี cache ถ้าบทสนทนายาวเกิน 30k tokens จะไม่เสนอให้ลดเป็นโมเดลถูกกว่า เพราะจะแพงกว่าเดิม
 - ถ้าโมเดลที่เลือกตอบไม่ได้ (id ผิด ไม่มีสิทธิ์ใช้) จะส่งใหม่ด้วยโมเดลของ session อัตโนมัติ
 - ลองดูว่า prompt ไหนจะได้โมเดลอะไร: `/clrouter test <ข้อความ>`
+
+**`/clrouter:dev <งาน>` (ทดลอง)**: แบ่งงาน dev ตามบทบาท Opus วางแผน, Sonnet เขียนโค้ด, Opus รีวิวจาก `git diff` จริง, Sonnet แก้ตามรีวิว (สูงสุด 2 รอบ), Haiku คุมขั้นตอนและสรุปผล
+
+ผลที่วัดจริงกับงานเล็ก (เพิ่มฟังก์ชัน `isPrime` พร้อมเทสต์): ใช้ Sonnet ตัวเดียว $0.07, Opus ตัวเดียว $0.14, pipeline นี้ $0.81 ทุกขั้นมีต้นทุนคงที่ (อ่านโค้ดใหม่ เขียนแผน/รีวิว เริ่ม cache ใหม่) งานเล็กจึงแพงกว่าใช้โมเดลเดียว pipeline คุ้มเฉพาะงานใหญ่ที่ให้ Sonnet เขียนโค้ดส่วนใหญ่แล้วประหยัดได้มากกว่าค่าวางแผนกับค่ารีวิว
 
 ## License
 

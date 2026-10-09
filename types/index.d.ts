@@ -3,6 +3,8 @@ export type ClrouterMode = 'ask' | 'auto' | 'suggest' | 'off'
 export type ClrouterDecision = {
   /** The first line of the prompt, cut short. */
   prompt: string
+  /** Characters scored (the typed prompt) and sent (with the host's blocks). */
+  chars: { typed: number; sent: number }
   recommended: 'haiku' | 'sonnet' | 'opus'
   reasons: readonly string[]
   /** `heuristic` or `model`: which judge settled it. */
