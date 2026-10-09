@@ -11,8 +11,13 @@ export type Route = {
   confidence: Confidence
   /** Labels of the signals that decided it, strongest first. */
   reasons: readonly string[]
-  /** Net score: negative leans cheap, positive leans capable. */
+  /** Weight of the deep-work signals: 3 or more is Opus work. */
   score: number
+  /**
+   * The cheapest tier this prompt may go to, whatever a classifier says:
+   * code, building and exact rules never go below Sonnet.
+   */
+  floor: Tier
 }
 
 type Signal = { pattern: RegExp; weight: number; label: string }
@@ -26,9 +31,19 @@ export const tierRank = (tier: Tier): number => TIER_RANK[tier]
 export const tierTitle = (tier: Tier): string =>
   tier.charAt(0).toUpperCase() + tier.slice(1)
 
+// Which work fits which model, from the benchmarks in bench/:
+//
+// - Opus: deep work, where the hard part is deciding: architecture, a root
+//   cause across systems, a security audit, a codebase-wide change.
+// - Sonnet: building or changing code, and anything with exact rules. On a
+//   well-specified build Sonnet matched or beat Opus at a third of the cost.
+// - Haiku: answering, explaining, translating, summarizing and small
+//   mechanical edits. It built a polished tax page with wrong legal caps,
+//   so code and exact rules never go to it.
+//
 // English is matched on word boundaries; Thai has no spaces between words,
 // so its phrases are matched as plain substrings.
-const COMPLEX: readonly Signal[] = [
+const DEEP: readonly Signal[] = [
   {
     pattern:
       /\b(architect(ure|ural)?|system design|design (a|an|the) (new )?(system|service|platform|backend|schema))\b|สถาปัตยกรรม|ออกแบบระบบ/i,
@@ -37,80 +52,103 @@ const COMPLEX: readonly Signal[] = [
   },
   {
     pattern:
-      /\b(migrat(e|ion|ing)|rewrite|re-?architect|from scratch|overhaul)\b|ย้ายระบบ|เขียนใหม่ทั้งหมด/i,
+      /\b(across|throughout) (the )?(whole |entire )?(code ?base|repo(sitory)?|project|app)\b|\b(entire|whole) (code ?base|repo(sitory)?|project)\b|ทั้งโปรเจกต์|ทั้งโปรเจค|ทั้งระบบ/i,
+    weight: 3,
+    label: 'codebase-wide change',
+  },
+  {
+    pattern:
+      /\b(security (audit|review)|threat model(ing)?|vulnerabilit(y|ies)|exploit)\b|ช่องโหว่|ตรวจความปลอดภัย/i,
+    weight: 3,
+    label: 'security audit',
+  },
+  {
+    pattern: /\b(migrat(e|ion|ing)|rewrite|re-?architect|from scratch|overhaul)\b|ย้ายระบบ|เขียนใหม่ทั้งหมด/i,
     weight: 2,
     label: 'migration / rewrite',
   },
   {
     pattern:
-      /\b(across|throughout) (the )?(whole |entire )?(code ?base|repo(sitory)?|project|app)\b|\b(entire|whole) (code ?base|repo(sitory)?|project)\b|\bmulti(ple)?[- ]files?\b|ทั้งโปรเจกต์|ทั้งโปรเจค|ทั้งระบบ|หลายไฟล์/i,
-    weight: 2,
-    label: 'codebase-wide change',
-  },
-  {
-    pattern:
-      /\b(race conditions?|deadlocks?|memory leaks?|concurren(cy|t)|distributed|eventual consistency|scalab(ility|le)|multi-tenant)\b/i,
+      /\b(race conditions?|deadlocks?|memory leaks?|concurrency|distributed|eventual consistency|scalab(ility|le)|multi-tenant|in production|across (the )?\w+ (and \w+ )?services)\b/i,
     weight: 2,
     label: 'hard systems problem',
   },
   {
     pattern:
-      /\b(security (audit|review)|threat model(ing)?|vulnerabilit(y|ies)|exploit)\b|ช่องโหว่|ความปลอดภัย/i,
+      /\b(root cause|deep dive|investigate|figure out why|track down|trade-?offs?|pros and cons|compare (the )?(approaches|options|designs))\b|หาสาเหตุ|วิเคราะห์|เปรียบเทียบแนวทาง/i,
     weight: 2,
-    label: 'security analysis',
+    label: 'root cause / trade-offs',
   },
   {
-    pattern:
-      /\b(root cause|deep dive|investigate|trade-?offs?|pros and cons|compare (the )?(approaches|options|designs))\b|หาสาเหตุ|วิเคราะห์|เปรียบเทียบ/i,
-    weight: 2,
-    label: 'deep analysis',
-  },
-  {
-    pattern: /\b(plan|roadmap|strategy)\b|วางแผน|กลยุทธ์/i,
+    pattern: /\b(roadmap|strategy|plan the)\b|วางแผน|กลยุทธ์/i,
     weight: 1,
     label: 'planning',
   },
-  {
-    pattern:
-      /\b(optimi[sz]e|optimi[sz]ation|performance|latency|throughput|algorithm|time complexity|prove|proof)\b|ประสิทธิภาพ|อัลกอริทึม/i,
-    weight: 1,
-    label: 'optimization / algorithms',
-  },
-  { pattern: /\bdesign\b|ออกแบบ/i, weight: 1, label: 'design work' },
 ]
 
-const SIMPLE: readonly Signal[] = [
+// Making or changing software. Any of these keeps the prompt off Haiku.
+const BUILD: readonly Signal[] = [
   {
     pattern:
-      /\b(what('s| is| are| does)|who (is|was)|define|definition of|meaning of|stands? for)\b|คืออะไร|หมายถึง|แปลว่า|ย่อมาจาก/i,
+      /\b(build|create|implement|develop|scaffold|set up)\b|\bmake (a|an|the|me)\b|\bwrite (a|an|the|me|some)? ?(function|script|program|class|component|test|tests|app|api|endpoint|query|module|cli|page|site)\b|สร้าง|พัฒนา|เขียนโค้ด|เขียนโปรแกรม|เขียนฟังก์ชัน|ทำเว็บ|ทำแอป|ทำหน้า|ทำระบบ/i,
     weight: 2,
-    label: 'quick factual question',
-  },
-  {
-    pattern: /\btranslat(e|ion)\b|แปล/i,
-    weight: 2,
-    label: 'translation',
+    label: 'building software',
   },
   {
     pattern:
-      /\b(typos?|spelling|grammar|rephrase|reword|proofread)\b|คำผิด|สะกด|เกลาภาษา/i,
+      /\b(add|fix|bugs?|debug|errors?|exceptions?|stack ?trace|refactor|tests?|endpoints?|components?|functions?|class|scripts?|api|quer(y|ies)|regex|features?|convert|parse|pr|pull request)\b|แก้บั๊ก|บั๊ก|เพิ่มฟีเจอร์|ฟังก์ชัน|ทดสอบ|แก้โค้ด|แก้ให้|ไม่ทำงาน/i,
+    weight: 1,
+    label: 'changing code',
+  },
+]
+
+// Languages and tools. Naming one is code work only when the prompt isn't a
+// question: "convert this CSV with Python" builds, "what is a closure in
+// JavaScript?" asks.
+const TECH: Signal = {
+  pattern:
+    /\b(python|javascript|typescript|node(\.?js)?|react|vue|sql|java|golang|rust|php|css|html|docker|kubernetes)\b/i,
+  weight: 1,
+  label: 'changing code',
+}
+
+// Rules that must come out exact. A cheap model answers these confidently
+// and wrong, so they never go below Sonnet, built or asked.
+const EXACT: Signal = {
+  pattern:
+    /\b(tax(es|ation)?|vat|payroll|withholding|interest rate|compound interest|loan|mortgage|amorti[sz]ation|invoice|accounting|ledger|insurance premium|pension|dosage|legal|compliance|regulation)\b|ภาษี|ค่าลดหย่อน|เงินเดือน|ดอกเบี้ย|เงินกู้|ผ่อน|บัญชี|ใบกำกับ|เบี้ยประกัน|กฎหมาย|ประกันสังคม|คำนวณ/i,
+  weight: 0,
+  label: 'exact rules (tax, money, law)',
+}
+
+const ANSWER: readonly Signal[] = [
+  {
+    pattern:
+      /\b(what('s| is| are| does)|who (is|was)|define|definition of|meaning of|stands? for|explain|describe|difference between|why (is|does|do)|how (does|do|to))\b|คืออะไร|หมายถึง|แปลว่า|ย่อมาจาก|อธิบาย|ต่างกันยังไง|ต่างกันอย่างไร/i,
+    weight: 2,
+    label: 'question or explanation',
+  },
+  { pattern: /\btranslat(e|ion)\b|แปล(?!ง)/i, weight: 2, label: 'translation' },
+  {
+    pattern: /\b(typos?|spelling|grammar|rephrase|reword|proofread)\b|คำผิด|สะกด|เกลาภาษา/i,
     weight: 2,
     label: 'wording / typo fix',
+  },
+  {
+    pattern: /\b(draft|e-?mail|caption|tweet|slogan|cover letter)\b|แคปชั่น|อีเมล|คำโปรย/i,
+    weight: 2,
+    label: 'short writing',
   },
   {
     pattern: /^(hi|hello|hey|yo|sup|thanks|thank you|thx)\b|^สวัสดี|^หวัดดี|^ขอบคุณ/i,
     weight: 2,
     label: 'small talk',
   },
-  {
-    pattern: /\b(summari[sz]e|summary|tl;?dr)\b|สรุป/i,
-    weight: 1,
-    label: 'summarization',
-  },
+  { pattern: /\b(summari[sz]e|summary|tl;?dr)\b|สรุป/i, weight: 2, label: 'summarization' },
   {
     pattern: /\b(rename|reformat|format|sort|indent)\b|เปลี่ยนชื่อ|จัดรูปแบบ/i,
-    weight: 1,
-    label: 'mechanical edit',
+    weight: 2,
+    label: 'rename / formatting',
   },
   {
     pattern:
@@ -120,10 +158,8 @@ const SIMPLE: readonly Signal[] = [
   },
 ]
 
-// Ordinary coding work. It counts once however many words match: it keeps
-// a routine task off the cheapest tier without pushing it to the top one.
-const STANDARD =
-  /\b(implement|add|fix|bug|debug|error|exception|stack ?trace|refactor|tests?|unit tests?|endpoint|component|function|class|script|api|query|regex)\b|เขียนโค้ด|แก้บั๊ก|เพิ่มฟีเจอร์|ฟังก์ชัน|ทดสอบ/i
+// Edits so small the word "fix" in them doesn't make them code work.
+const MECHANICAL = /\b(typos?|spelling|rename|reformat|format|indent)\b|คำผิด|สะกด|เปลี่ยนชื่อ|จัดรูปแบบ/i
 
 // A bare go-ahead continues whatever the conversation was doing: the prompt
 // alone says nothing about the work, so the router keeps the current model.
@@ -148,13 +184,31 @@ const LIST_ITEM = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm
 
 const SHORT_CHARS = 60
 const LONG_CHARS = 1500
-const VERY_LONG_CHARS = 4000
 
-const HAIKU_AT_MOST = -2
 const OPUS_AT_LEAST = 3
 
+const matching = (signals: readonly Signal[], prompt: string): Signal[] =>
+  signals.filter(signal => signal.pattern.test(prompt))
+
+const total = (signals: readonly Signal[]): number =>
+  signals.reduce((sum, signal) => sum + signal.weight, 0)
+
+const byWeight = (signals: readonly Signal[]): string[] =>
+  [...signals].sort((a, b) => b.weight - a.weight).map(signal => signal.label)
+
+const CLASSIFY_MIN_CHARS = 20
+
 /**
- * Scores a prompt and names the tier that fits it, or `null` when the
+ * Whether a prompt the keywords abstained on is still worth handing to the
+ * classifier: long enough to stand on its own, and no bare follow-up.
+ */
+export function isClassifiable(text: string): boolean {
+  const prompt = typedText(text)
+  return prompt.length >= CLASSIFY_MIN_CHARS && !prompt.startsWith('/') && !FOLLOW_UP.test(prompt)
+}
+
+/**
+ * Names the tier whose kind of work this prompt is, or `null` when the
  * prompt carries too little signal to judge (a follow-up, a bare request
  * that only makes sense against the conversation).
  */
@@ -164,81 +218,71 @@ export function route(text: string): Route | null {
     return null
   }
 
-  const hits: Signal[] = []
-  let complex = 0
-  let simple = 0
-
-  for (const signal of COMPLEX) {
-    if (signal.pattern.test(prompt)) {
-      complex += signal.weight
-      hits.push(signal)
-    }
-  }
-  for (const signal of SIMPLE) {
-    if (signal.pattern.test(prompt)) {
-      simple += signal.weight
-      hits.push({ ...signal, weight: -signal.weight })
-    }
-  }
-
-  const isStandard = STANDARD.test(prompt)
-  const hasKeywords = hits.length > 0 || isStandard
-
-  const files = new Set((prompt.match(FILE_PATH) ?? []).map(f => f.toLowerCase()))
-  if (files.size >= 3) {
-    complex += 2
-    hits.push({ pattern: FILE_PATH, weight: 2, label: `touches ${files.size} files` })
-  }
-
-  const listItems = (prompt.match(LIST_ITEM) ?? []).length
-  if (listItems >= 4) {
-    complex += 1
-    hits.push({ pattern: LIST_ITEM, weight: 1, label: 'multi-step requirements' })
-  }
-
-  if (prompt.length >= VERY_LONG_CHARS) {
-    complex += 2
-    hits.push({ pattern: /$/, weight: 2, label: 'very long, detailed prompt' })
-  } else if (prompt.length >= LONG_CHARS) {
-    complex += 1
-    hits.push({ pattern: /$/, weight: 1, label: 'long, detailed prompt' })
-  } else if (prompt.length < SHORT_CHARS) {
-    if (!hasKeywords) {
-      return null
-    }
-    simple += 1
-  }
-
-  const score = complex - simple + (isStandard ? 1 : 0)
+  const deep = matching(DEEP, prompt)
+  const build = matching(BUILD, prompt)
+  const answer = matching(ANSWER, prompt)
+  const isExact = EXACT.pattern.test(prompt)
   const hasCode = (prompt.match(CODE_FENCE) ?? []).length >= 2
+  const files = new Set((prompt.match(FILE_PATH) ?? []).map(f => f.toLowerCase())).size
+  const isSpec = (prompt.match(LIST_ITEM) ?? []).length >= 4
+  const deepScore = total(deep)
 
-  let tier: Tier =
-    score <= HAIKU_AT_MOST ? 'haiku' : score >= OPUS_AT_LEAST ? 'opus' : 'sonnet'
-  let confidence: Confidence
-  if (tier === 'haiku') {
-    confidence = score <= HAIKU_AT_MOST - 1 ? 'high' : 'low'
-  } else if (tier === 'opus') {
-    confidence = score >= OPUS_AT_LEAST + 1 ? 'high' : 'low'
-  } else {
-    confidence = isStandard && complex === 0 && simple <= 1 ? 'high' : 'low'
+  // Code work: a building verb, pasted code, files named, a spec, or a
+  // coding word that isn't just part of a typo or rename.
+  const isMechanical = MECHANICAL.test(prompt) && !build.some(s => s.weight >= 2)
+  const codeSignals = isMechanical ? build.filter(s => s.weight >= 2) : [...build]
+  if (answer.length === 0 && codeSignals.length === 0 && TECH.pattern.test(prompt)) {
+    codeSignals.push(TECH)
+  }
+  const builds: string[] = byWeight(codeSignals)
+  if (hasCode) builds.push('includes code')
+  if (files >= 1) builds.push(files === 1 ? 'names a file' : `touches ${files} files`)
+  if (isSpec) builds.push('detailed spec')
+  const isCodeWork = builds.length > 0
+
+  const floor: Tier = isCodeWork || isExact || deepScore >= 2 ? 'sonnet' : 'haiku'
+
+  if (deepScore >= OPUS_AT_LEAST) {
+    return {
+      tier: 'opus',
+      confidence: deepScore >= OPUS_AT_LEAST + 1 || deep.length >= 2 ? 'high' : 'low',
+      reasons: byWeight(deep),
+      score: deepScore,
+      floor,
+    }
   }
 
-  // Pasted code is code work: never the cheapest tier on keywords alone.
-  if (tier === 'haiku' && hasCode) {
-    tier = 'sonnet'
-    confidence = 'low'
-    hits.push({ pattern: CODE_FENCE, weight: 0, label: 'includes code' })
+  if (floor === 'sonnet') {
+    const reasons = [
+      ...(isExact ? [EXACT.label] : []),
+      ...builds,
+      ...byWeight(deep),
+    ]
+    return { tier: 'sonnet', confidence: 'high', reasons, score: deepScore, floor }
   }
 
-  const reasons = hits
-    .filter(hit => (tier === 'haiku' ? hit.weight < 0 : hit.weight >= 0))
-    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-    .map(hit => hit.label)
-  if (reasons.length === 0) {
-    reasons.push(tier === 'sonnet' ? 'routine coding task' : 'general request')
+  if (answer.length > 0) {
+    return {
+      tier: 'haiku',
+      confidence: total(answer) >= 2 ? 'high' : 'low',
+      reasons: byWeight(answer),
+      score: deepScore,
+      floor,
+    }
   }
 
-  return { tier, confidence, reasons, score }
+  // Nothing recognizable. Short: likely leans on the conversation, so keep
+  // the current model. Long: a request worth a capable model.
+  if (prompt.length < SHORT_CHARS) {
+    return null
+  }
+  return {
+    tier: 'sonnet',
+    confidence: 'low',
+    reasons: [prompt.length >= LONG_CHARS ? 'long request' : 'general request'],
+    score: deepScore,
+    floor,
+  }
 }
 
 /**
@@ -246,9 +290,9 @@ export function route(text: string): Route | null {
  * self-describing so the classifier can answer with a label alone.
  */
 export const CLASSIFIER_LABELS: Record<Tier, string> = {
-  haiku: 'simple-question-lookup-translation-or-tiny-edit',
-  sonnet: 'routine-coding-or-writing-task',
-  opus: 'complex-architecture-deep-debugging-or-large-multi-file-work',
+  haiku: 'answer-explain-translate-summarize-or-tiny-edit-no-new-code',
+  sonnet: 'build-fix-or-speed-up-code-in-one-app-or-calculate-with-exact-rules',
+  opus: 'system-architecture-security-audit-or-bug-spanning-several-services',
 }
 
 export function tierOfLabel(label: string | undefined): Tier | undefined {

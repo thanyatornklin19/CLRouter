@@ -5,6 +5,7 @@ import type { ClrouterDecision, ClrouterMode } from '../types'
 import {
   CLASSIFIER_LABELS,
   TIERS,
+  isClassifiable,
   modelTitle,
   route,
   tierInText,
@@ -90,17 +91,23 @@ function firstLine(text: string): string {
   return line.length > 60 ? `${line.slice(0, 57)}...` : line
 }
 
-/** The heuristic's verdict, handed to the small model when it is unsure. */
+/**
+ * The keywords' verdict, handed to the small model when they are unsure or
+ * found nothing. The model may send a prompt up, never below the floor the
+ * keywords set, and never to Haiku unless the keywords saw an answer-type
+ * prompt: a cheap model that is wrong looks the same as one that is right.
+ */
 async function judge(
   $: EngineInterface,
   text: string,
   config: Config,
 ): Promise<{ route: Route; judge: 'heuristic' | 'model' } | null> {
   const heuristic = route(text)
-  const isUnsure = heuristic === null || heuristic.confidence === 'low'
   const shouldAsk =
-    config.judge === 'model' ||
-    (config.judge === 'hybrid' && heuristic !== null && isUnsure)
+    config.judge === 'model'
+      ? heuristic !== null || isClassifiable(text)
+      : config.judge === 'hybrid' &&
+        (heuristic === null ? isClassifiable(text) : heuristic.confidence === 'low')
   if (!shouldAsk) {
     return heuristic === null ? null : { route: heuristic, judge: 'heuristic' }
   }
@@ -110,14 +117,18 @@ async function judge(
       `A user sent this request to an AI coding assistant:\n\n${typedText(text).slice(0, CLASSIFIER_CHARS)}`,
       TIERS.map(tier => CLASSIFIER_LABELS[tier]),
     )
-    const tier = tierOfLabel(label)
-    if (tier !== undefined) {
+    const said = tierOfLabel(label)
+    if (said !== undefined) {
+      const floor: Tier = heuristic?.floor ?? 'sonnet'
+      const isHaikuAllowed = heuristic?.tier === 'haiku'
+      if (said === 'haiku' && !isHaikuAllowed) {
+        return heuristic === null ? null : { route: heuristic, judge: 'heuristic' }
+      }
+      const tier: Tier = tierRank(said) < tierRank(floor) ? floor : said
       const reasons =
-        heuristic !== null && heuristic.tier === tier
-          ? heuristic.reasons
-          : [`classifier: ${label}`]
+        heuristic !== null && heuristic.tier === tier ? heuristic.reasons : [`classifier: ${label}`]
       return {
-        route: { tier, confidence: 'high', reasons, score: heuristic?.score ?? 0 },
+        route: { tier, confidence: 'high', reasons, score: heuristic?.score ?? 0, floor },
         judge: 'model',
       }
     }

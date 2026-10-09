@@ -1,6 +1,8 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
+
+import { CLASSIFIER_LABELS } from '../hooks/router'
 
 const SESSION_MODEL = 'claude-opus-5-5'
 const HAIKU = 'claude-haiku-5-5'
@@ -159,3 +161,55 @@ test(
     expect(state.sent).toEqual(['claude-nope-0', SESSION_MODEL])
   },
 )
+
+describe('the classifier', () => {
+  const presentation = { isFullscreen: false, columns: 80 }
+  const testPrompt = ($: Engine, prompt: string) =>
+    $.command.run({ command: 'clrouter', args: `test ${prompt}`, origin: { kind: 'composer' }, presentation })
+  const classifierSays = (on: On, tier: 'haiku' | 'sonnet' | 'opus') => {
+    const calls = { count: 0 }
+    on('model.classify', () => {
+      calls.count += 1
+      return { value: CLASSIFIER_LABELS[tier] }
+    })
+    return calls
+  }
+  const HYBRID = { options: { judge: 'hybrid' } }
+
+  test('decides what the keywords could not, upward', HYBRID, async ($, on) => {
+    world($, on, 'Keep Opus')
+    classifierSays(on, 'opus')
+    const { text } = await testPrompt($, 'give me 5 name ideas for a coffee shop')
+    expect(text).toMatch(/^Opus .* by model/)
+  })
+
+  test('cannot send an unrecognized prompt to Haiku', HYBRID, async ($, on) => {
+    world($, on, 'Keep Opus')
+    classifierSays(on, 'haiku')
+    const { text } = await testPrompt($, 'give me 5 name ideas for a coffee shop')
+    expect(text).toMatch(/^No call/)
+  })
+
+  test('cannot overrule the keywords down to Haiku', HYBRID, async ($, on) => {
+    world($, on, 'Keep Opus')
+    const calls = classifierSays(on, 'haiku')
+    const { text } = await testPrompt($, 'the login button does nothing on mobile Safari, can you look into it')
+    expect(calls.count).toBe(1)
+    expect(text).toMatch(/^Sonnet .* by heuristic/)
+  })
+
+  test('cannot take exact rules below Sonnet, even when always asked', { options: { judge: 'model' } }, async ($, on) => {
+    world($, on, 'Keep Opus')
+    const calls = classifierSays(on, 'haiku')
+    const { text } = await testPrompt($, 'what is the VAT on 12,500 baht?')
+    expect(calls.count).toBe(1)
+    expect(text).toMatch(/^Sonnet /)
+  })
+
+  test('is not asked when the keywords are sure', HYBRID, async ($, on) => {
+    world($, on, 'Keep Opus')
+    const calls = classifierSays(on, 'haiku')
+    await testPrompt($, 'what is the VAT on 12,500 baht?')
+    expect(calls.count).toBe(0)
+  })
+})

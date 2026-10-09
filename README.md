@@ -6,7 +6,7 @@ You type a prompt. CLRouter reads it, decides whether it needs **Haiku**, **Sonn
 
 ```
  CLRouter
- Haiku fits this prompt (quick factual question). Run it on Haiku instead of Opus?
+ Haiku fits this prompt (question or explanation). Run it on Haiku instead of Opus?
 
  ❯ 1. Use Haiku for this prompt
    2. Keep Opus
@@ -31,14 +31,35 @@ Answer `y` to add the marketplace, then pick a scope (user scope loads it in eve
 
 Requires a Claude Code build with the function-hooks plugin API (built and tested on 2.1.295). That API is early access and can change between releases.
 
+## Which work goes to which model
+
+The rules come from the benchmarks in [`bench/`](bench/), not from a hunch:
+
+| Model | Work it gets | Why |
+| --- | --- | --- |
+| **Haiku** | Answering and explaining, translating, summarizing, short writing (an email, a caption), typos, renames, formatting | Cheap and good at these. It never gets code to build, because it built a polished tax page with wrong legal caps, twice. |
+| **Sonnet** | Building or changing code, and anything with **exact rules**: tax, VAT, payroll, interest, loans, insurance, law, in Thai or English | On the tax app it was right 2 of 2 at $0.16. Opus was right 1 of 2 at $0.51. |
+| **Opus** | Architecture and system design, security audits, codebase-wide changes, migrations, bugs that span several services | Where the hard part is deciding, not typing. This tier is a judgment: no benchmark has measured it yet. |
+
+Exact rules have a **floor**. A prompt about tax or money never goes below Sonnet, whether it asks for code or just a number ("what is the VAT on 12,500 baht?").
+
 ## How it works
 
-1. **`prompt.submit`**: the prompt is scored by keyword and structure signals (English and Thai): architecture, migrations, codebase-wide changes and hard debugging push up; quick questions, translations, typos and renames push down; pasted code never lands on Haiku. When the score is borderline, the `hybrid` judge asks the engine's small, fast model to classify it.
-2. If the recommended tier is not the one you're on, it asks you (mode `ask`), switches silently (`auto`), or just tells you (`suggest`).
-3. **`turn.step`**: every model request of that turn is sent to the chosen model. Subagents keep their own models.
-4. If the chosen model never answers (wrong id, no access), the request is re-sent on your session model, so the router never costs you a turn.
+1. **`prompt.submit`**: keywords in English and Thai put the prompt in one of the three kinds of work above.
+2. **The classifier.** When the keywords are unsure, or find nothing in a prompt long enough to stand on its own, the `hybrid` judge asks the engine's small model. That model can move a prompt up but never below its floor. It can only send a prompt to Haiku when the keywords also read it as a question.
+3. **Asking you.** If the recommended model isn't the one you're on, CLRouter asks you (mode `ask`), switches silently (`auto`), or just tells you (`suggest`).
+4. **`turn.step`**: every model request of that turn goes to the chosen model. Subagents keep their own models.
+5. **Fallback.** If the chosen model never answers (a wrong id, no access), the request is re-sent on your session model, so the router never costs you a turn.
 
-CLRouter **abstains** when the prompt alone doesn't say enough: "yes", "continue", "ok do it", "ทำต่อ" and other short follow-ups keep the current model, because they continue whatever the conversation was doing.
+CLRouter **abstains** when a prompt alone doesn't say enough. "yes", "continue", "ok do it", "ทำต่อ" and other short follow-ups keep the current model, because they continue whatever the conversation was doing.
+
+**How accurate the keywords are.** On 20 prompts written after tuning and never tuned against, they picked the right model 14 times and left 2 to the current model:
+
+- 3 Opus-kind prompts went to Sonnet, which is cheaper and probably still fine.
+- 1 Haiku-kind prompt went to Sonnet, which is costlier but safe.
+- None was sent to Haiku when it needed more.
+
+The classifier then fixes some of the misses; `/clrouter test <prompt>` shows its call.
 
 ## The cost trade-off
 
@@ -128,7 +149,13 @@ Routing mistakes are the most useful bug reports: open an issue with the prompt,
 
 CLRouter คือปลั๊กอินของ Claude Code ที่เลือกโมเดลให้เหมาะกับแต่ละ prompt
 
-พิมพ์ prompt ตามปกติ CLRouter จะวิเคราะห์ว่างานนี้ควรใช้ **Haiku** (คำถามสั้น แปลภาษา แก้คำผิด), **Sonnet** (งานเขียนโค้ดทั่วไป) หรือ **Opus** (ออกแบบสถาปัตยกรรม ย้ายระบบ debug ยาก แก้หลายไฟล์) ถ้าไม่ตรงกับโมเดลที่ใช้อยู่ จะเด้งหน้าต่างถามแบบเดียวกับที่ Claude ถามกลับ ให้เลือกว่าจะเปลี่ยนไหม เปลี่ยนแค่ prompt นั้น prompt ถัดไปกลับมาใช้โมเดลเดิม
+พิมพ์ prompt ตามปกติ CLRouter จะดูว่างานนี้เป็นงานแบบไหน แล้วเลือกโมเดลที่เหมาะกับงานนั้น (กฎมาจากผลวัดจริงใน `bench/`):
+
+- **Haiku**: ตอบคำถาม อธิบาย แปล สรุป เขียนข้อความสั้น (อีเมล แคปชั่น) แก้คำผิด เปลี่ยนชื่อ จัดรูปแบบ **ไม่ให้เขียนโค้ดสร้างของ**
+- **Sonnet**: สร้างหรือแก้โค้ด และ**งานที่มีกฎตายตัว** (ภาษี VAT เงินเดือน ดอกเบี้ย เงินกู้ ประกัน กฎหมาย) งานกลุ่มนี้ไม่มีวันถูกส่งไปต่ำกว่า Sonnet แม้จะแค่ถามตัวเลข เพราะ Haiku ตอบผิดได้แบบดูน่าเชื่อ
+- **Opus**: ออกแบบสถาปัตยกรรม ตรวจช่องโหว่ แก้ทั้ง codebase ย้ายระบบ บั๊กที่ข้ามหลาย service
+
+ถ้าไม่ตรงกับโมเดลที่ใช้อยู่ จะเด้งหน้าต่างถามแบบเดียวกับที่ Claude ถามกลับ เปลี่ยนแค่ prompt นั้น prompt ถัดไปกลับมาใช้โมเดลเดิม
 
 **ติดตั้ง** (พิมพ์ใน Claude Code):
 
