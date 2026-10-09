@@ -6,8 +6,14 @@ export type Tier = 'haiku' | 'sonnet' | 'opus'
 
 export type Confidence = 'high' | 'low'
 
+/** The kind of work a prompt is: what picks both the model and the effort. */
+export type Kind = 'answer' | 'build' | 'exact' | 'deep'
+
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
 export type Route = {
   tier: Tier
+  kind: Kind
   confidence: Confidence
   /** Labels of the signals that decided it, strongest first. */
   reasons: readonly string[]
@@ -245,6 +251,7 @@ export function route(text: string): Route | null {
   if (deepScore >= OPUS_AT_LEAST) {
     return {
       tier: 'opus',
+      kind: 'deep',
       confidence: deepScore >= OPUS_AT_LEAST + 1 || deep.length >= 2 ? 'high' : 'low',
       reasons: byWeight(deep),
       score: deepScore,
@@ -258,12 +265,20 @@ export function route(text: string): Route | null {
       ...builds,
       ...byWeight(deep),
     ]
-    return { tier: 'sonnet', confidence: 'high', reasons, score: deepScore, floor }
+    return {
+      tier: 'sonnet',
+      kind: isExact ? 'exact' : 'build',
+      confidence: 'high',
+      reasons,
+      score: deepScore,
+      floor,
+    }
   }
 
   if (answer.length > 0) {
     return {
       tier: 'haiku',
+      kind: 'answer',
       confidence: total(answer) >= 2 ? 'high' : 'low',
       reasons: byWeight(answer),
       score: deepScore,
@@ -278,11 +293,42 @@ export function route(text: string): Route | null {
   }
   return {
     tier: 'sonnet',
+    kind: 'build',
     confidence: 'low',
     reasons: [prompt.length >= LONG_CHARS ? 'long request' : 'general request'],
     score: deepScore,
     floor,
   }
+}
+
+/**
+ * The effort a kind of work needs on the model that runs it, from the
+ * benchmarks in bench/:
+ *
+ * - High and max bought nothing on builds. Sonnet at high cost 2× and Haiku
+ *   at max 11× (25 minutes), for the same scores. So builds run at medium.
+ *   Sonnet at low also passed (3 of 3) for 12% less, but on clear specs only.
+ * - High fixed Haiku's careless errors: its tax caps went from 18-19/20 to
+ *   20/20 twice. So Haiku, kept for code, runs at high.
+ * - Effort didn't fix a misread rule: Opus missed the same cap at medium
+ *   and high. Deep work runs at high on judgment; it isn't measured yet.
+ * - Answers need little thought: low.
+ *
+ * Max is never chosen.
+ */
+export function effortFor(kind: Kind, tier: Tier | undefined): Effort {
+  if (kind === 'answer') {
+    return 'low'
+  }
+  if (kind === 'deep') {
+    return 'high'
+  }
+  return tier === 'haiku' ? 'high' : 'medium'
+}
+
+/** The kind a tier's work is when only the tier is known (the classifier's). */
+export function kindOfTier(tier: Tier, exact: boolean): Kind {
+  return tier === 'haiku' ? 'answer' : tier === 'opus' ? 'deep' : exact ? 'exact' : 'build'
 }
 
 /**

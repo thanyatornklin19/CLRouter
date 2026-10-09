@@ -40,6 +40,31 @@ Per-run detail is in [`results.json`](results.json).
   - With Sonnet writing them, the cascade cost 1.7× Sonnet alone.
   - It can only win when the code is much bigger than its tests. This benchmark doesn't measure that.
 
+## Effort
+
+The runs above used `medium`, the default. The same task at other efforts (`EFFORT=<level> bench/thai-tax/run.sh ...`):
+
+| Model and effort | Runs | Avg cost | Hidden tests | Avg time |
+| --- | --- | --- | --- | --- |
+| Sonnet low | 2 | $0.14 | 20/20, 20/20 | 48 s |
+| Sonnet medium | 2 | $0.16 | 20/20, 20/20 | 57 s |
+| Sonnet high | 1 | $0.31 | 20/20 | 134 s |
+| Haiku medium | 2 | $0.07 | 18/20, 19/20 | 157 s |
+| Haiku high | 2 | $0.16 | 20/20, 20/20 | 260 s |
+| Haiku max | 2 | $1.80 | 20/20, 20/20 | 1,465 s |
+| Opus medium | 2 | $0.51 | 20/20, 19/20 | 121 s |
+| Opus high | 1 | $0.56 | 19/20 | 153 s |
+
+What it shows:
+
+- **Effort fixes carelessness, not ignorance.**
+  - Haiku at medium got a different cap wrong each run, and at high it got none wrong.
+  - Opus missed the same rule (the provident fund's 15% cap) at medium and at high.
+- **High and max buy nothing on a build like this.**
+  - Sonnet at high cost twice as much as at medium, for the same score.
+  - Haiku at max cost 11 times as much as at high and took 25 minutes, for the same score.
+- **Low held up.** Sonnet at low passed both runs. So did Haiku at low on the spreadsheet benchmark (48/48, $0.035).
+
 Two runs per approach is not enough for statistics. Treat the table as evidence, not proof.
 
 ## Run it yourself

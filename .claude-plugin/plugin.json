@@ -1,7 +1,7 @@
 {
   "name": "clrouter",
-  "version": "0.4.0",
-  "description": "Routes each prompt to the model that fits it, and runs dev tasks through a cascade where the cheapest model codes against locked acceptance tests.",
+  "version": "0.5.0",
+  "description": "Routes each prompt to the model and effort that fit its work, and runs dev tasks through a cascade where the cheapest model codes against locked acceptance tests.",
   "author": {
     "name": "thanyatornklin19"
   },
@@ -39,6 +39,16 @@
         "heuristic",
         "hybrid",
         "model"
+      ]
+    },
+    "effort": {
+      "type": "string",
+      "title": "Effort",
+      "description": "auto: set each prompt's effort to fit its work (low for answers, medium for code, high for deep work, never max); off: leave effort as you set it.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "off"
       ]
     },
     "haikuModel": {

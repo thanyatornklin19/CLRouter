@@ -10,7 +10,8 @@
    "haiku-5-5": 0.016,
    "opus-5-5": 0.624,
    "sonnet-5-5": 0.139
-  }
+  },
+  "effort": "medium (stages: their own)"
  },
  {
   "name": "cascade-2",
@@ -23,7 +24,8 @@
    "haiku-5-5": 0.019,
    "opus-5-5": 0.563,
    "sonnet-5-5": 0.159
-  }
+  },
+  "effort": "medium (stages: their own)"
  },
  {
   "name": "cascadeS-2",
@@ -35,7 +37,8 @@
   "models": {
    "haiku-5-5": 0.02,
    "sonnet-5-5": 0.241
-  }
+  },
+  "effort": "medium (stages: their own)"
  },
  {
   "name": "haiku-1",
@@ -49,7 +52,8 @@
   "ui": "1/2",
   "models": {
    "haiku-5-5": 0.057
-  }
+  },
+  "effort": "medium"
  },
  {
   "name": "haiku-2",
@@ -62,7 +66,56 @@
   "ui": "2/2",
   "models": {
    "haiku-5-5": 0.079
-  }
+  },
+  "effort": "medium"
+ },
+ {
+  "name": "haiku-high-1",
+  "cost": 0.202,
+  "seconds": 295,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.202
+  },
+  "effort": "high"
+ },
+ {
+  "name": "haiku-high-2",
+  "cost": 0.123,
+  "seconds": 225,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.123
+  },
+  "effort": "high"
+ },
+ {
+  "name": "haiku-max-1",
+  "cost": 1.865,
+  "seconds": 1512,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 1.865
+  },
+  "effort": "max"
+ },
+ {
+  "name": "haiku-max-2",
+  "cost": 1.741,
+  "seconds": 1417,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 1.741
+  },
+  "effort": "max"
  },
  {
   "name": "opus-1",
@@ -73,7 +126,8 @@
   "ui": "2/2",
   "models": {
    "opus-5-5": 0.44
-  }
+  },
+  "effort": "medium"
  },
  {
   "name": "opus-2",
@@ -86,7 +140,22 @@
   "ui": "2/2",
   "models": {
    "opus-5-5": 0.575
-  }
+  },
+  "effort": "medium"
+ },
+ {
+  "name": "opus-high-1",
+  "cost": 0.558,
+  "seconds": 153,
+  "hidden": "19/20",
+  "hidden_failed": [
+   "provident fund capped at 15% of salary"
+  ],
+  "ui": "2/2",
+  "models": {
+   "opus-5-5": 0.558
+  },
+  "effort": "high"
  },
  {
   "name": "pipeline-1",
@@ -99,7 +168,8 @@
    "haiku-5-5": 0.003,
    "opus-5-5": 0.355,
    "sonnet-5-5": 0.36
-  }
+  },
+  "effort": "medium (stages: their own)"
  },
  {
   "name": "sonnet-1",
@@ -110,7 +180,8 @@
   "ui": "2/2",
   "models": {
    "sonnet-5-5": 0.154
-  }
+  },
+  "effort": "medium"
  },
  {
   "name": "sonnet-2",
@@ -121,6 +192,44 @@
   "ui": "2/2",
   "models": {
    "sonnet-5-5": 0.157
-  }
+  },
+  "effort": "medium"
+ },
+ {
+  "name": "sonnet-high-1",
+  "cost": 0.312,
+  "seconds": 134,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "sonnet-5-5": 0.3,
+   "haiku-5-5": 0.012
+  },
+  "effort": "high"
+ },
+ {
+  "name": "sonnet-low-1",
+  "cost": 0.136,
+  "seconds": 47,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "sonnet-5-5": 0.136
+  },
+  "effort": "low"
+ },
+ {
+  "name": "sonnet-low-2",
+  "cost": 0.137,
+  "seconds": 49,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "sonnet-5-5": 0.137
+  },
+  "effort": "low"
  }
 ]

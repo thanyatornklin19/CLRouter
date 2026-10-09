@@ -11,6 +11,8 @@ export type ClrouterDecision = {
   judge: 'heuristic' | 'model'
   /** The model the turn was sent to, or null when it kept the session's. */
   routedTo: string | null
+  /** The effort the turn was sent at, or null when it kept the session's. */
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null
 }
 
 declare module 'claude-code' {

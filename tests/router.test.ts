@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { modelTitle, route, tierInText, tierOfModel } from '../hooks/router'
+import { effortFor, modelTitle, route, tierInText, tierOfModel } from '../hooks/router'
 
 const MODELS = { haiku: 'haiku', sonnet: 'sonnet', opus: 'opus' }
 
@@ -99,6 +99,35 @@ describe('route', () => {
     const verdict = route('Design the architecture for a multi-tenant billing system')
     expect(verdict?.reasons[0]).toBe('architecture / system design')
     expect(verdict?.confidence).toBe('high')
+  })
+})
+
+describe('effortFor', () => {
+  test('fits the effort to the work and the model running it', async () => {
+    expect(effortFor('answer', 'haiku')).toBe('low')
+    expect(effortFor('answer', 'opus')).toBe('low')
+    expect(effortFor('build', 'sonnet')).toBe('medium')
+    expect(effortFor('exact', 'sonnet')).toBe('medium')
+    expect(effortFor('build', 'opus')).toBe('medium')
+    expect(effortFor('exact', 'haiku')).toBe('high')
+    expect(effortFor('build', 'haiku')).toBe('high')
+    expect(effortFor('deep', 'opus')).toBe('high')
+    expect(effortFor('build', undefined)).toBe('medium')
+  })
+
+  test('never picks max', async () => {
+    for (const kind of ['answer', 'build', 'exact', 'deep'] as const) {
+      for (const tier of ['haiku', 'sonnet', 'opus', undefined] as const) {
+        expect(effortFor(kind, tier)).not.toBe('max')
+      }
+    }
+  })
+
+  test('routes carry their kind of work', async () => {
+    expect(route('what is a closure in JavaScript?')?.kind).toBe('answer')
+    expect(route('add a loading spinner to the submit button component')?.kind).toBe('build')
+    expect(route('what is the VAT on 12,500 baht?')?.kind).toBe('exact')
+    expect(route('do a security audit of the login and session handling')?.kind).toBe('deep')
   })
 })
 

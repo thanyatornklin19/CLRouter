@@ -14,6 +14,7 @@ type World = {
   contextTokens: number
   turns: number
   sent: string[]
+  efforts: string[]
 }
 
 // The engine beneath the plugin: the session's model and context, the
@@ -26,7 +27,7 @@ function world(
   contextTokens = 1000,
   env: Record<string, string> = {},
 ): World {
-  const state: World = { asked: [], answer, contextTokens, turns: 0, sent: [] }
+  const state: World = { asked: [], answer, contextTokens, turns: 0, sent: [], efforts: [] }
   mock.env(on, env)
   on('session.model', () => ({ value: SESSION_MODEL }))
   on('session.usage', () => ({
@@ -48,6 +49,7 @@ function world(
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('turn.step', async function* ($, e) {
     state.sent.push(e.model)
+    state.efforts.push(String(e.effort ?? 'unset'))
     // A model id the API does not know gets no response at all.
     const stopReason = e.model.includes('nope') ? null : 'end_turn'
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason, usage: null }
@@ -78,8 +80,9 @@ test('asks before switching and runs the turn on the model chosen', OPTIONS, asy
   await $.prompt.submit(submit('what is a closure in JavaScript?'))
 
   expect(state.asked).toHaveLength(1)
-  expect(state.asked[0]).toContain('Haiku instead of Opus')
+  expect(state.asked[0]).toContain('Run it on Haiku at low effort instead of Opus?')
   expect(await runTurn($, state)).toBe(HAIKU)
+  expect(state.efforts.at(-1)).toBe('low')
 })
 
 test('keeps the session model when the person says keep', OPTIONS, async ($, on) => {
@@ -161,6 +164,42 @@ test(
     expect(state.sent).toEqual(['claude-nope-0', SESSION_MODEL])
   },
 )
+
+describe('effort', () => {
+  test('keeps Opus when asked to, at the effort the work needs', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+    expect(state.efforts.at(-1)).toBe('low')
+  })
+
+  test('is set without asking when the model already fits', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('Design the architecture for a multi-tenant billing system'))
+
+    expect(state.asked).toHaveLength(0)
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+    expect(state.efforts.at(-1)).toBe('high')
+  })
+
+  test('is left alone when set to off', { options: { judge: 'heuristic', effort: 'off' } }, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+    expect(state.asked[0]).toContain('Run it on Haiku instead of Opus?')
+    expect(await runTurn($, state)).toBe(HAIKU)
+    expect(state.efforts.at(-1)).toBe('unset')
+  })
+
+  test('is left alone on a follow-up', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('ok do it'))
+
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+    expect(state.efforts.at(-1)).toBe('unset')
+  })
+})
 
 describe('the classifier', () => {
   const presentation = { isFullscreen: false, columns: 80 }

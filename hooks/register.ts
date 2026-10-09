@@ -5,7 +5,9 @@ import type { ClrouterDecision, ClrouterMode } from '../types'
 import {
   CLASSIFIER_LABELS,
   TIERS,
+  effortFor,
   isClassifiable,
+  kindOfTier,
   modelTitle,
   route,
   tierInText,
@@ -15,11 +17,13 @@ import {
   tierRank,
   tierTitle,
 } from './router'
-import type { Route, Tier } from './router'
+import type { Effort, Route, Tier } from './router'
 
 const MODES: readonly ClrouterMode[] = ['ask', 'auto', 'suggest', 'off']
 const JUDGES = ['heuristic', 'hybrid', 'model'] as const
 type Judge = (typeof JUDGES)[number]
+const EFFORT_MODES = ['auto', 'off'] as const
+type EffortMode = (typeof EFFORT_MODES)[number]
 
 // Who typed it: the person at a terminal, a phone or web client, an SDK host.
 // Notifications, peers, schedules and plugins keep the session's model.
@@ -42,11 +46,14 @@ const lastDecision = atom({ plugin: 'clrouter', key: 'last' } as const, null)
 type Config = {
   mode: ClrouterMode
   judge: Judge
+  effort: EffortMode
   models: Record<Tier, string>
   downgradeMaxContext: number
 }
 
-type Pending = { model: string; tier: Tier }
+// A turn's route: the model to send it to (null keeps the session's) and
+// the effort to send it at (null keeps the session's).
+type Pending = { model: string | null; tier: Tier | null; effort: Effort | null }
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.find(one => one === value) ?? fallback
@@ -62,6 +69,7 @@ function readConfig(options: PluginOptions): Config {
   return {
     mode: pick(options.mode, MODES, 'ask'),
     judge: pick(options.judge, JUDGES, 'hybrid'),
+    effort: pick(options.effort, EFFORT_MODES, 'auto'),
     models: {
       haiku: model('haikuModel', 'haiku'),
       sonnet: model('sonnetModel', 'sonnet'),
@@ -127,8 +135,12 @@ async function judge(
       const tier: Tier = tierRank(said) < tierRank(floor) ? floor : said
       const reasons =
         heuristic !== null && heuristic.tier === tier ? heuristic.reasons : [`classifier: ${label}`]
+      const kind =
+        heuristic !== null && heuristic.tier === tier
+          ? heuristic.kind
+          : kindOfTier(tier, heuristic?.kind === 'exact')
       return {
-        route: { tier, confidence: 'high', reasons, score: heuristic?.score ?? 0, floor },
+        route: { tier, kind, confidence: 'high', reasons, score: heuristic?.score ?? 0, floor },
         judge: 'model',
       }
     }
@@ -145,6 +157,7 @@ async function askPerson(
   recommended: Route,
   current: string,
   contextTokens: number,
+  effort: Effort | null,
 ): Promise<{ tier: Tier | null; mode?: ClrouterMode }> {
   const target = tierTitle(recommended.tier)
   const keep = modelTitle(current)
@@ -162,7 +175,7 @@ async function askPerson(
   let answer: string
   try {
     answer = await $.ui.ask(
-      `${target} fits this prompt (${why}). Run it on ${target} instead of ${keep}${cacheNote}?`,
+      `${target} fits this prompt (${why}). Run it on ${target}${effort === null ? '' : ` at ${effort} effort`} instead of ${keep}${cacheNote}?`,
       { header: 'CLRouter', options: [useLabel, keepLabel, autoLabel, offLabel] },
     )
   } catch {
@@ -223,34 +236,40 @@ export const register: Register = (on, options) => {
     const recommended = verdict.route
     const current = await $.session.model()
     const currentTier = tierOfModel(current, config.models)
-    if (currentTier === recommended.tier) {
-      return next(e)
-    }
+    const isEffortAuto = config.effort === 'auto' && mode !== 'suggest'
 
-    // A cheaper model reads the whole conversation uncached: past a point
-    // that costs more than the cached read on the current model saves.
-    const { context } = await $.session.usage()
-    const contextTokens = context.tokens ?? 0
-    const isDowngrade =
-      currentTier !== undefined && tierRank(recommended.tier) < tierRank(currentTier)
-    if (isDowngrade && contextTokens > config.downgradeMaxContext) {
-      return next(e)
-    }
-
-    let tier: Tier | null = recommended.tier
-    if (mode === 'suggest') {
-      $.ui.toast(
-        `${tierTitle(recommended.tier)} fits this one: ${recommended.reasons[0]}. /model to switch.`,
-      )
-      tier = null
-    } else if (mode === 'ask') {
-      const choice = await askPerson($, recommended, current, contextTokens)
-      tier = choice.tier
-      if (choice.mode !== undefined) {
-        await update($, sessionMode, () => choice.mode ?? null)
+    // The tier to switch this turn to; null keeps the session's model.
+    let tier: Tier | null = null
+    if (currentTier !== recommended.tier) {
+      // A cheaper model reads the whole conversation uncached: past a point
+      // that costs more than the cached read on the current model saves.
+      const { context } = await $.session.usage()
+      const contextTokens = context.tokens ?? 0
+      const isDowngrade =
+        currentTier !== undefined && tierRank(recommended.tier) < tierRank(currentTier)
+      if (!(isDowngrade && contextTokens > config.downgradeMaxContext)) {
+        if (mode === 'suggest') {
+          $.ui.toast(
+            `${tierTitle(recommended.tier)} fits this one: ${recommended.reasons[0]}. /model to switch.`,
+          )
+        } else if (mode === 'ask') {
+          const offered = isEffortAuto ? effortFor(recommended.kind, recommended.tier) : null
+          const choice = await askPerson($, recommended, current, contextTokens, offered)
+          tier = choice.tier
+          if (choice.mode !== undefined) {
+            await update($, sessionMode, () => choice.mode ?? null)
+          }
+          if (choice.mode === 'off') {
+            return next(e)
+          }
+        } else {
+          tier = recommended.tier
+        }
       }
     }
 
+    // The effort fits the work and the model that will actually run it.
+    const effort = isEffortAuto ? effortFor(recommended.kind, tier ?? currentTier) : null
     const model = tier === null ? null : await resolveModel($, config.models[tier])
     const decision: ClrouterDecision = {
       prompt: firstLine(typedText(e.text)),
@@ -259,14 +278,15 @@ export const register: Register = (on, options) => {
       reasons: recommended.reasons,
       judge: verdict.judge,
       routedTo: model,
+      effort,
     }
     await update($, lastDecision, () => decision)
 
-    if (tier === null || model === null) {
+    if (model === null && effort === null) {
       return next(e)
     }
 
-    pending = { model, tier }
+    pending = { model, tier, effort }
     try {
       return await next(e)
     } finally {
@@ -277,9 +297,15 @@ export const register: Register = (on, options) => {
   // Raised for the main loop alone, inside the submit's `next`.
   on('turn.start', ($, e, next) => {
     if (pending !== null) {
+      const { model, tier, effort } = pending
       routes.set(e.turnId, pending)
-      $.ui.status(`CLRouter → ${tierTitle(pending.tier)}`)
-      $.ui.log(`CLRouter: this prompt runs on ${pending.model}`)
+      const at = effort === null ? '' : ` at ${effort} effort`
+      $.ui.status(
+        tier === null ? `CLRouter: ${effort} effort` : `CLRouter → ${tierTitle(tier)}${effort === null ? '' : ` · ${effort}`}`,
+      )
+      if (model !== null) {
+        $.ui.log(`CLRouter: this prompt runs on ${model}${at}`)
+      }
       pending = null
     }
 
@@ -292,9 +318,14 @@ export const register: Register = (on, options) => {
       return yield* next(e)
     }
 
+    const effort = routed.effort === null ? {} : { effort: routed.effort }
+    if (routed.model === null) {
+      return yield* next({ ...e, ...effort })
+    }
+
     // A model that answers nothing at all (a wrong id, no access) must not
     // cost the person their turn: send the request again on the session's.
-    const stream = next({ ...e, model: routed.model })
+    const stream = next({ ...e, ...effort, model: routed.model })
     let hasAnswered = false
     for await (const chunk of stream) {
       hasAnswered ||= chunk.kind !== 'engine'
@@ -309,7 +340,7 @@ export const register: Register = (on, options) => {
     $.ui.status(undefined)
     $.ui.log(`CLRouter: ${routed.model} did not answer, so this prompt runs on ${e.model}`)
 
-    return yield* next(e)
+    return yield* next({ ...e, ...effort })
   })
 
   on('turn.complete', ($, e, next) => {
@@ -333,9 +364,9 @@ export const register: Register = (on, options) => {
       if (verdict === null) {
         return { text: 'No call: too little signal. CLRouter keeps the current model.' }
       }
-      const { tier, confidence, reasons, score } = verdict.route
+      const { tier, kind, confidence, reasons, score } = verdict.route
       return {
-        text: `${tierTitle(tier)} (${config.models[tier]}), ${confidence} confidence, score ${score}, by ${verdict.judge}: ${reasons.join(', ')}`,
+        text: `${tierTitle(tier)} (${config.models[tier]}) at ${effortFor(kind, tier)} effort, ${kind} work, ${confidence} confidence, score ${score}, by ${verdict.judge}: ${reasons.join(', ')}`,
       }
     }
 
@@ -359,12 +390,12 @@ export const register: Register = (on, options) => {
     const models = TIERS.map(tier => `${tier}=${config.models[tier]}`).join(', ')
     const lines = [
       `CLRouter mode: ${mode}${mode === config.mode ? '' : ` (configured: ${config.mode})`}`,
-      `Judge: ${config.judge}. Models: ${models}.`,
+      `Judge: ${config.judge}. Effort: ${config.effort}. Models: ${models}.`,
       `Session model: ${await $.session.model()}.`,
     ]
     if (last !== null) {
       lines.push(
-        `Last call: "${last.prompt}" (${last.chars.typed} of ${last.chars.sent} chars scored) → ${last.recommended} (${last.reasons.join(', ')}), ${last.routedTo === null ? 'kept the session model' : `ran on ${last.routedTo}`}.`,
+        `Last call: "${last.prompt}" (${last.chars.typed} of ${last.chars.sent} chars scored) → ${last.recommended} (${last.reasons.join(', ')}), ${last.routedTo === null ? 'kept the session model' : `ran on ${last.routedTo}`}${last.effort === null ? '' : ` at ${last.effort} effort`}.`,
       )
     }
 

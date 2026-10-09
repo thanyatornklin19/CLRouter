@@ -61,6 +61,36 @@ CLRouter **abstains** when a prompt alone doesn't say enough. "yes", "continue",
 
 The classifier then fixes some of the misses; `/clrouter test <prompt>` shows its call.
 
+## Effort, per prompt
+
+With `effort: auto` (the default), each prompt also runs at the effort its work needs on the model that runs it:
+
+| Work | Effort |
+| --- | --- |
+| Answering, explaining, translating, small edits | `low` |
+| Building or changing code, and exact rules, on Sonnet or Opus | `medium` |
+| The same, when Haiku runs it (you kept Haiku) | `high` |
+| Architecture, security audits, codebase-wide changes | `high` |
+
+CLRouter never picks `max`.
+
+The [tax benchmark](bench/thai-tax#effort) is where these come from:
+
+- **High and max bought nothing on builds.** Sonnet at high cost 2× for the same score. Haiku at max cost 11× and took 25 minutes, for the same score.
+- **High fixed Haiku's careless errors.** Its scores went from 18 and 19 out of 20 to 20/20 twice.
+- **Effort didn't fix a misread rule.** Opus missed the same cap at medium and at high.
+- **Low passed too (3 of 3 runs, 12% cheaper).** Builds still run at medium, because those runs were all on clear specs.
+- **Deep work's `high` is a judgment.** It isn't measured yet.
+
+**How effort is applied:**
+
+- **The model changes.** The popup names the effort, for example "Run it on Sonnet at medium effort instead of Opus?".
+- **The model already fits.** Only the effort changes, without asking, and the status line shows it.
+- **Follow-ups keep your effort.** "yes", "ทำต่อ" and the like stay at what you set.
+- **To turn this off,** set `effort: off`.
+
+**Known gap.** A question about a deep topic ("what's the trade-off between a monolith and microservices?") is treated like doing deep work: Opus at high.
+
 ## The cost trade-off
 
 Per-prompt routing is not free. Your conversation is prompt-cached on the model you've been using. Another model has to read the whole context uncached. On a long conversation, sending a trivial question to Haiku can cost more than letting Opus answer it from cache.
@@ -105,6 +135,7 @@ Set them in `/config` (each field is a row) or in `settings.json` under `pluginC
 | Option | Default | What it does |
 | --- | --- | --- |
 | `mode` | `ask` | `ask`: pop up before switching. `auto`: switch silently. `suggest`: toast the recommendation only. `off`: do nothing. |
+| `effort` | `auto` | `auto`: set each prompt's effort to fit its work, as above. `off`: leave effort as you set it. |
 | `judge` | `hybrid` | `heuristic`: keywords only, free and instant. `hybrid`: ask the small model when the keywords are unsure. `model`: always ask it. |
 | `haikuModel` | `haiku` | Model for simple prompts. Alias or full id. |
 | `sonnetModel` | `sonnet` | Model for routine prompts. |
@@ -156,6 +187,15 @@ CLRouter คือปลั๊กอินของ Claude Code ที่เล�
 - **Opus**: ออกแบบสถาปัตยกรรม ตรวจช่องโหว่ แก้ทั้ง codebase ย้ายระบบ บั๊กที่ข้ามหลาย service
 
 ถ้าไม่ตรงกับโมเดลที่ใช้อยู่ จะเด้งหน้าต่างถามแบบเดียวกับที่ Claude ถามกลับ เปลี่ยนแค่ prompt นั้น prompt ถัดไปกลับมาใช้โมเดลเดิม
+
+**Effort ปรับให้เองทุก prompt** (ค่าเริ่มต้น `effort: auto`):
+
+- งานตอบคำถาม: `low`
+- งานโค้ดและงานที่มีกฎตายตัว: `medium` (ถ้าให้ Haiku ทำ ใช้ `high`)
+- งานออกแบบหรือตรวจช่องโหว่: `high`
+- ไม่เลือก `max` เด็ดขาด
+
+ผลวัด: Sonnet ที่ high แพงขึ้น 2 เท่า Haiku ที่ max แพงขึ้น 11 เท่าและใช้เวลา 25 นาที ทั้งคู่ได้ผลเท่าเดิม ส่วน Haiku ที่ high แก้ความสะเพร่าได้ (คำนวณภาษีถูก 20/20 ทั้งสองรอบ) effort ช่วยแก้ความสะเพร่า แต่แก้ความไม่รู้ไม่ได้
 
 **ติดตั้ง** (พิมพ์ใน Claude Code):
 
