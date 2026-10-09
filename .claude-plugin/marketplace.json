@@ -1,0 +1,13 @@
+{
+  "name": "clrouter",
+  "description": "CLRouter: a Claude Code plugin that routes each prompt to the model that fits it.",
+  "owner": {
+    "name": "thanyatornklin19"
+  },
+  "plugins": [
+    {
+      "name": "clrouter",
+      "source": "./"
+    }
+  ]
+}

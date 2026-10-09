@@ -1,0 +1,161 @@
+import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+const SESSION_MODEL = 'claude-opus-5-5'
+const HAIKU = 'claude-haiku-5-5'
+const OPTIONS = { options: { judge: 'heuristic' } }
+
+type World = {
+  asked: string[]
+  answer: string
+  contextTokens: number
+  turns: number
+  sent: string[]
+}
+
+// The engine beneath the plugin: the session's model and context, the
+// person answering the dialog, a submit that starts a turn, and a model
+// request that records which model it was sent to.
+function world(
+  engine: Engine,
+  on: On,
+  answer: string,
+  contextTokens = 1000,
+  env: Record<string, string> = {},
+): World {
+  const state: World = { asked: [], answer, contextTokens, turns: 0, sent: [] }
+  mock.env(on, env)
+  on('session.model', () => ({ value: SESSION_MODEL }))
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { tokens: state.contextTokens, window: 200000 },
+      rateLimits: [],
+    },
+  }))
+  on('tool.call', { tool: 'AskUserQuestion' }, ($, e) => {
+    const question = e.questions[0]?.question ?? ''
+    state.asked.push(question)
+    return { result: { questions: e.questions, answers: { [question]: state.answer } } }
+  })
+  on('ui.status', () => ({ value: undefined }))
+  on('ui.log', () => ({ value: undefined }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('turn.step', async function* ($, e) {
+    state.sent.push(e.model)
+    // A model id the API does not know gets no response at all.
+    const stopReason = e.model.includes('nope') ? null : 'end_turn'
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason, usage: null }
+  })
+  on('prompt.submit', async ($, e) => {
+    state.turns += 1
+    await engine.turn.start({ text: e.text, turnId: `t${state.turns}` })
+    return { text: e.text }
+  })
+  return state
+}
+
+// Runs the latest turn's first request, ends the turn, and answers which
+// model the request was sent to.
+async function runTurn($: Engine, state: World): Promise<string | undefined> {
+  const turnId = `t${state.turns}`
+  for await (const _ of $.turn.step({ turnId, index: 0, model: SESSION_MODEL, messageCount: 1 })) {
+    // drain
+  }
+  await $.turn.complete({ turnId, answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
+  return state.sent.at(-1)
+}
+
+const submit = (text: string) => ({ text, wait: false, origin: { kind: 'composer' as const } })
+
+test('asks before switching and runs the turn on the model chosen', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Haiku for this prompt')
+  await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+  expect(state.asked).toHaveLength(1)
+  expect(state.asked[0]).toContain('Haiku instead of Opus')
+  expect(await runTurn($, state)).toBe(HAIKU)
+})
+
+test('keeps the session model when the person says keep', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Keep Opus')
+  await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+  expect(await runTurn($, state)).toBe(SESSION_MODEL)
+})
+
+test('does not ask when the session model already fits', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Opus for this prompt')
+  await $.prompt.submit(
+    submit('Design the architecture for a multi-tenant billing system and plan the migration'),
+  )
+
+  expect(state.asked).toHaveLength(0)
+  expect(await runTurn($, state)).toBe(SESSION_MODEL)
+})
+
+test('skips a downgrade once the context is large', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Haiku for this prompt', 120000)
+  await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+  expect(state.asked).toHaveLength(0)
+  expect(await runTurn($, state)).toBe(SESSION_MODEL)
+})
+
+test('auto-routes without asking after "Auto-route this session"', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Auto-route this session')
+  await $.prompt.submit(submit('what is a closure in JavaScript?'))
+  expect(await runTurn($, state)).toBe(HAIKU)
+
+  await $.prompt.submit(submit('fix the typo in the README'))
+  expect(state.asked).toHaveLength(1)
+  expect(await runTurn($, state)).toBe(HAIKU)
+})
+
+test('leaves prompts from notifications and peers alone', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Haiku for this prompt')
+  await $.prompt.submit({
+    text: 'what is a closure in JavaScript?',
+    wait: false,
+    origin: { kind: 'task-notification' },
+  })
+
+  expect(state.asked).toHaveLength(0)
+  expect(await runTurn($, state)).toBe(SESSION_MODEL)
+})
+
+test('/clrouter sets the mode and tests a prompt', OPTIONS, async ($, on) => {
+  world($, on, 'Keep Opus')
+  const presentation = { isFullscreen: false, columns: 80 }
+  const run = (args: string) =>
+    $.command.run({ command: 'clrouter', args, origin: { kind: 'composer' }, presentation })
+
+  expect((await run('off')).text).toBe('CLRouter mode for this session: off.')
+  expect((await run('status')).text).toContain('CLRouter mode: off (configured: ask)')
+  expect((await run('test what is a monad?')).text).toMatch(/^Haiku \(haiku\)/)
+  expect((await run('reset')).text).toContain('configured one: ask')
+})
+
+test('honors a provider pin for the alias', OPTIONS, async ($, on) => {
+  const state = world($, on, 'Use Haiku for this prompt', 1000, {
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'us.anthropic.claude-haiku-5-5-v1:0',
+  })
+  await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+  expect(await runTurn($, state)).toBe('us.anthropic.claude-haiku-5-5-v1:0')
+})
+
+test(
+  'falls back to the session model when the routed one never answers',
+  { options: { judge: 'heuristic', haikuModel: 'claude-nope-0' } },
+  async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+    expect(state.sent).toEqual(['claude-nope-0', SESSION_MODEL])
+  },
+)
