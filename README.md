@@ -46,33 +46,26 @@ Per-prompt routing is not free. Your conversation is prompt-cached on the model 
 
 So CLRouter never offers a downgrade once the context passes `downgradeMaxContext` (30k tokens by default), and the question tells you when a switch will re-read a large context. Upgrades are always offered: when a task needs a stronger model, quality beats the cache.
 
-## `/clrouter:dev`: a pipeline with a model per role (experimental)
+## `/clrouter:dev`: a cost-tiered cascade (experimental, being benchmarked)
 
 ```
 /clrouter:dev Add rate limiting to the /login endpoint, with tests
 ```
 
-| Stage | Agent | Model | Why that model |
-| --- | --- | --- | --- |
-| Plan | `clrouter:planner` (read-only) | Opus | Decisions are where mistakes are expensive. |
-| Build | `clrouter:coder` | Sonnet | Writing code to a clear plan doesn't need the top tier. |
-| Review | `clrouter:reviewer` (read-only) | Opus | It reads the real `git diff`, not the coder's report. |
-| Fix | `clrouter:coder` | Sonnet | Applies the numbered fixes. At most 2 review rounds. |
-| Dispatch and summary | the command itself | Haiku | It only passes text between stages and sums up. |
+1. **Opus writes the acceptance tests** from the task, before any code exists. This is where the expensive model's judgment goes: deciding what "done" means, including domain rules the task only implies.
+2. **The tests are locked.** They are archived and restored before every run, so the coder can't make them pass by editing them.
+3. **The cheapest model that passes writes the code.** It tries `haiku`, `haiku` again, then `sonnet`, then `opus`, and stops at the first attempt whose tests pass.
+4. **Haiku runs the steps and writes the summary.**
 
-Each stage starts in a fresh context, so the expensive model never re-reads your whole conversation.
+**Why it changed.** The previous version planned on Opus, coded on Sonnet and reviewed on Opus. Measured, it cost more than a single model for the same result:
 
-**Measured, not assumed.** One small task (an `isPrime` function with tests, in a two-file repo), run once each:
+- On a small task: $0.81, against $0.14 for Opus alone.
+- On a well-specified hard task: $1.09, against $0.05 for Haiku alone. All four approaches passed the 48 hidden tests.
+- Its coder-written tests missed 2 of 3 bugs planted to check them.
 
-| How | Cost | Result |
-| --- | --- | --- |
-| Sonnet alone | $0.07 | works, 5 tests |
-| Opus alone | $0.14 | works, 8 tests |
-| `/clrouter:dev` | $0.81 | works, 8 tests, review approved |
+The cascade is being benchmarked against single models now. This section will carry the numbers, whichever way they go.
 
-88% of the pipeline's cost was the two Opus stages, each exploring the code from scratch. Every stage has a fixed overhead: it reads the codebase, writes a plan or a review, and starts a new cache. On a small task that overhead is the whole bill. The pipeline pays off only when the task is big enough that Sonnet writing most of the code saves more than planning and review cost, or when a review catches a bug that would cost more to find later. For a small task, use one model.
-
-To change a stage's model, edit `model:` in `agents/*.md` or `commands/dev.md`.
+To change a stage's model, edit `model:` in `agents/*.md`, or the attempt order in `commands/dev.md`.
 
 ## Settings
 
@@ -114,7 +107,7 @@ Layout:
 
 - `hooks/router.ts`: the heuristic scorer. Pure functions; tune the signals here.
 - `hooks/register.ts`: the hooks (prompt, turn, command) and the dialog.
-- `agents/`, `commands/dev.md`: the `/clrouter:dev` pipeline's stages.
+- `agents/`, `commands/dev.md`: the `/clrouter:dev` cascade's stages.
 - `types/index.d.ts`: the session state the plugin keeps.
 - `tests/`: `claude plugin test` suites.
 
@@ -140,9 +133,9 @@ CLRouter คือปลั๊กอินของ Claude Code ที่เล�
 - ถ้าโมเดลที่เลือกตอบไม่ได้ (id ผิด ไม่มีสิทธิ์ใช้) จะส่งใหม่ด้วยโมเดลของ session อัตโนมัติ
 - ลองดูว่า prompt ไหนจะได้โมเดลอะไร: `/clrouter test <ข้อความ>`
 
-**`/clrouter:dev <งาน>` (ทดลอง)**: แบ่งงาน dev ตามบทบาท Opus วางแผน, Sonnet เขียนโค้ด, Opus รีวิวจาก `git diff` จริง, Sonnet แก้ตามรีวิว (สูงสุด 2 รอบ), Haiku คุมขั้นตอนและสรุปผล
+**`/clrouter:dev <งาน>` (ทดลอง, กำลังวัดผล)**: Opus เขียน acceptance tests จากโจทย์ก่อนมีโค้ด แล้วล็อกไว้ (คืนค่าเดิมทุกครั้งก่อนรัน แก้เทสต์ให้ผ่านไม่ได้) จากนั้นให้โมเดลถูกที่สุดเขียนโค้ด ลอง Haiku → Haiku → Sonnet → Opus หยุดที่ตัวแรกที่ผ่าน
 
-ผลที่วัดจริงกับงานเล็ก (เพิ่มฟังก์ชัน `isPrime` พร้อมเทสต์): ใช้ Sonnet ตัวเดียว $0.07, Opus ตัวเดียว $0.14, pipeline นี้ $0.81 ทุกขั้นมีต้นทุนคงที่ (อ่านโค้ดใหม่ เขียนแผน/รีวิว เริ่ม cache ใหม่) งานเล็กจึงแพงกว่าใช้โมเดลเดียว pipeline คุ้มเฉพาะงานใหญ่ที่ให้ Sonnet เขียนโค้ดส่วนใหญ่แล้วประหยัดได้มากกว่าค่าวางแผนกับค่ารีวิว
+แบบเดิม (Opus วางแผน/รีวิว) วัดแล้วแพงกว่าใช้โมเดลเดียวโดยได้ผลเท่ากัน จึงเปลี่ยนเป็นแบบนี้ ผลวัดของแบบใหม่จะใส่ไว้ที่นี่ ไม่ว่าจะออกมาดีหรือแย่
 
 ## License
 

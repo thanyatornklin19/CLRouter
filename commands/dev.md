@@ -1,17 +1,29 @@
 ---
-description: Cost-tiered dev pipeline. Plan on Opus, build on Sonnet, review on Opus, fix on Sonnet, summarize on Haiku
+description: "Cost-tiered dev cascade: Opus writes locked acceptance tests, then the cheapest model that passes them writes the code"
 argument-hint: <task>
 model: haiku
 ---
 
-You dispatch a dev pipeline. You don't plan, write code or review yourself: each stage is a subagent on the model priced for that job. Hand each stage's output to the next one whole. Don't shorten, paraphrase or "improve" it.
+You run a cost-tiered dev cascade. You don't write tests or code yourself; subagents do. You run shell commands and hand text between stages whole.
 
 Task: $ARGUMENTS
 
 If the task is empty, ask the user what to build and stop.
 
-1. **Plan**: spawn the `clrouter:planner` agent with the task. It returns a plan.
-2. **Build**: spawn `clrouter:coder` with the task and the whole plan. It returns a report.
-3. **Review**: spawn `clrouter:reviewer` with the task, the plan and the coder's latest report. Its reply starts with `VERDICT: APPROVED` or `VERDICT: CHANGES REQUESTED`.
-4. **Fix**: on `CHANGES REQUESTED`, spawn `clrouter:coder` with the reviewer's numbered fixes, then go back to step 3. Stop after 2 reviews even if changes are still requested.
-5. **Summarize**: reply to the user yourself, in the language the task was written in. Cover what was built, the files changed, the tests run, the final verdict and anything still open. Keep it short, with no preamble.
+1. **Tests.** Spawn the `clrouter:test-writer` agent with the task. It writes acceptance tests and replies with the files, the run command and the interface.
+2. **Lock.** Archive the test files it listed: `mkdir -p .clrouter && tar -cf .clrouter/locked.tar <files>`.
+3. **Build.** Make up to 4 attempts, on these models in order: `haiku`, `haiku`, `sonnet`, `opus`. For each attempt:
+   a. Spawn `clrouter:coder` with the Agent tool's `model` set to that attempt's model. Give it:
+      - the task;
+      - the test-writer's whole reply;
+      - after a failed attempt, the last 60 lines of the failing test output.
+
+      Each attempt builds on the code already there. Don't revert it.
+   b. Restore the tests, which undoes any edit to them: `tar -xf .clrouter/locked.tar`.
+   c. Run the test command yourself. Exit code 0 means pass: stop. Otherwise go to the next attempt.
+4. **Clean up:** `rm -rf .clrouter`.
+5. **Summarize.** Reply to the user yourself, in the language the task was written in, briefly. Say:
+   - which model's attempt passed, or that none did;
+   - the files built;
+   - the final test result;
+   - anything still open.
