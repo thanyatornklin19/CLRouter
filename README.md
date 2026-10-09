@@ -36,6 +36,8 @@ This doesn't rank Opus against Sonnet. Opus missed a rule in 2 of its 3 runs and
 
 A second check, on someone else's tasks and tests (30 Exercism exercises, **a pilot**): on the first attempt Haiku passed 22, Sonnet 26 and Opus 30. Shown the failing test output for a second attempt, they passed 29, 30 and 30, at about $0.01, $0.09 and $0.16 per exercise. Most of the first-attempt gap was details the task never states, such as an exact error message or a type name, not coding. Together with the tax result, that points at what Haiku lacks: not skill, but anything that tells it when it is wrong. [The pilot, and what it can't show →](bench/aider-polyglot)
 
+A third, on real bug reports graded by the official SWE-bench harness (8 hard Django and SymPy tasks, **a pilot**): Haiku resolved 8, Sonnet 7, Opus 8, at $0.04, $0.10 and $0.33 per task. It can't rank them, because current models remember these public fixes: Opus wrote the maintainers' patch word for word, comments included, on two of the three tasks whose fix adds a comment. Only tasks newer than the models can settle Sonnet against Opus. [The pilot, and why →](bench/swe-bench-hard)
+
 ## Install
 
 In Claude Code:
@@ -80,6 +82,6 @@ CLRouter, last 7 days: 212 turns.
 - **Beta.** It's built on Claude Code's early-access plugin API (tested on 2.1.295), which can change.
 - **Accuracy.** On prompts it was never tuned on, it picked right 14 times in 20. It never sent code or exact rules to Haiku.
 - **Savings are a floor.** They are never overstated, and a loss is shown as a loss.
-- **Not measured yet:** routing for Opus-level work, the five-hour reading on a real Pro account, and whether Sonnet matches Opus on hard code: the pilot's exercises were too easy at the second attempt to say.
+- **Not measured yet:** routing for Opus-level work, the five-hour reading on a real Pro account, and whether Sonnet matches Opus on hard code: both pilots were too easy for current models, and public tasks are remembered.
 
 <sub>[How it works](docs/how-it-works.md) · [Benchmarks](bench/thai-tax) · MIT</sub>

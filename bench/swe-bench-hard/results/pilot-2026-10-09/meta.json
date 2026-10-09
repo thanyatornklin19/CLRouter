@@ -1,0 +1,8 @@
+{
+ "harness_commit": "98b37779a682b3b2302fc011f53081c3faaf34c4",
+ "claude_code": "2.1.295",
+ "started": "2026-10-09T14:16:26Z",
+ "args": "--max-total 50 --task-estimate 4 --jobs 3 --max-budget 5 --timeout 3600",
+ "stopped": "At 14:42 UTC the run was stopped and restarted capped at the first 9 positions of the order (--n 9 --jobs 2), because the maintainer asked to wrap up. The stop point was set by time, not by results. Two Haiku runs in flight at the stop were discarded and rerun; their partial cost is not in results.jsonl.",
+ "finished": "2026-10-09T15:05Z"
+}

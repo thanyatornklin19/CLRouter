@@ -47,7 +47,7 @@ C6 and C7 use one attempt, SWE-bench's own measure. There the issue text is the 
 
 ## Known limits, stated now
 
-- **Public benchmarks may be memorised.** Aider's exercises have been public for years. Absolute pass rates are unreliable; the comparison between arms, which share the exposure, is what we use.
+- **Public benchmarks are memorised, and not equally.** Aider's exercises and SWE-bench's fixes have been public for years. The [SWE-bench pilot](swe-bench-hard#why-these-numbers-dont-answer-the-question) found Opus writing the maintainers' patch word for word, comments included, more often than the cheaper models, so recall doesn't cancel out between arms: it flatters the bigger model. On public tasks, every result reports a verbatim-recall measure beside it, and a claim about Sonnet against Opus needs tasks newer than the models.
 - **At pass at 2 the pilot's models were at the ceiling.** On its 30 exercises they scored 97%, 100% and 100%, so the set may not be able to separate Sonnet from Opus. If it can't, C1's "as good" is met trivially and the real question, where Opus earns its price, needs harder tasks.
 - **Aider polyglot is puzzles, not repositories.** It says nothing about navigating a large codebase; [`swe-bench-hard`](swe-bench-hard) is for that. And since every task in either is a build task, the router sends nearly all of it to one model. That is why C3 has its own table.
 - **Our harnesses are not the leaderboards' protocols.** Both are agentic (Claude Code). Polyglot hides the tests and gives a second attempt only the failing output. SWE-bench grading is the official harness, unchanged, but the agent, its prompt and its sandbox are ours. Neither set of numbers is comparable to a leaderboard.
@@ -57,5 +57,6 @@ C6 and C7 use one attempt, SWE-bench's own measure. There the issue text is the 
 ## Changelog
 
 - 2026-10-09: version 1.
+- 2026-10-09: after the SWE-bench pilot, the known limit on memorisation was rewritten: the pilot showed recall differs between arms, so it doesn't cancel out. Results on public tasks now report a verbatim-recall measure. No claim, rule or threshold changed.
 - 2026-10-09: version 1.2, before any model ran on [`swe-bench-hard`](swe-bench-hard). Adds that benchmark and claims C6 and C7, because the polyglot pilot was at the ceiling. The task pool, the arms and the pass rules were fixed before the first model run on it; only the harness's own checks (reference fix passes, a do-nothing patch fails, one smoke run) came first.
 - 2026-10-09: version 1.1, after the pilot and before any run it governs. Pass at 2 became the primary measure for C1 and C2, because the pilot showed pass at 1 rewards details a task doesn't state (5 of the 9 exercises where models differed). The audit now counts `touched` and `seen` separately and requires a hand reading of commands that leave a run's folder. The ceiling is listed as a known limit. The thresholds were not changed.
