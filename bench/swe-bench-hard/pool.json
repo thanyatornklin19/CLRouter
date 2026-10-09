@@ -1,0 +1,415 @@
+{
+ "source": {
+  "repository": "https://github.com/aorwall/moatless-tools",
+  "commit": "011ead57a5c81664e9c45e07e1f50b17e695cc63",
+  "file": "moatless/evaluation/swebench_verified_all_evaluations.json",
+  "sha256": "e15b4a13156b2667e72d3dbafa2e4f1f0fb9aff1ab8865486ee91bb47ebb22d8",
+  "tasks_in_file": 500
+ },
+ "rule": {
+  "repos": [
+   "django/django",
+   "sympy/sympy"
+  ],
+  "resolved_by_at_least": 1,
+  "resolved_by_at_most": 5,
+  "of_submissions": 35,
+  "seed": 20261009
+ },
+ "submissions": [
+  "20231010_rag_claude2",
+  "20231010_rag_gpt35",
+  "20231010_rag_swellama13b",
+  "20231010_rag_swellama7b",
+  "20240402_rag_claude3opus",
+  "20240402_rag_gpt4",
+  "20240402_sweagent_claude3opus",
+  "20240402_sweagent_gpt4",
+  "20240509_amazon-q-developer-agent-20240430-dev",
+  "20240615_appmap-navie_gpt4o",
+  "20240617_factory_code_droid",
+  "20240628_autocoderover-v20240620",
+  "20240721_amazon-q-developer-agent-20240719-dev",
+  "20240728_sweagent_gpt4o",
+  "20240820_epam-ai-run-gpt-4o",
+  "20240820_honeycomb",
+  "20240824_gru",
+  "20240918_lingma-agent_lingma-swe-gpt-72b",
+  "20240918_lingma-agent_lingma-swe-gpt-7b",
+  "20240920_solver",
+  "20240924_solver",
+  "20241001_nfactorial",
+  "20241002_lingma-agent_lingma-swe-gpt-72b",
+  "20241002_lingma-agent_lingma-swe-gpt-7b",
+  "20241007_nfactorial",
+  "20241016_composio_swekit",
+  "20241016_epam-ai-run-gpt-4o",
+  "20241022_tools_claude-3-5-haiku",
+  "20241022_tools_claude-3-5-sonnet-updated",
+  "20241023_emergent",
+  "20241025_composio_swekit",
+  "20241028_agentless-1.5_gpt4o",
+  "20241028_solver",
+  "20241029_OpenHands-CodeAct-2.1-sonnet-20241022",
+  "20241029_epam-ai-run-claude-3-5-sonnet"
+ ],
+ "order": [
+  "django__django-11490",
+  "sympy__sympy-13877",
+  "django__django-11555",
+  "django__django-11299",
+  "django__django-16315",
+  "django__django-11265",
+  "sympy__sympy-19040",
+  "sympy__sympy-13615",
+  "django__django-13033",
+  "django__django-13121",
+  "django__django-11141",
+  "django__django-11740",
+  "django__django-15732",
+  "django__django-12308",
+  "django__django-11149",
+  "sympy__sympy-12419",
+  "django__django-11239",
+  "django__django-13807",
+  "sympy__sympy-13798",
+  "django__django-17084",
+  "django__django-12125",
+  "django__django-14122",
+  "django__django-12774",
+  "django__django-14631",
+  "django__django-16454",
+  "sympy__sympy-15599",
+  "django__django-15037",
+  "django__django-16082",
+  "django__django-13346",
+  "django__django-12273",
+  "django__django-12325",
+  "django__django-15161",
+  "django__django-15127",
+  "django__django-13128",
+  "django__django-15916",
+  "django__django-14376",
+  "sympy__sympy-13031",
+  "sympy__sympy-19783",
+  "django__django-16032",
+  "django__django-14580",
+  "sympy__sympy-15017",
+  "django__django-13406",
+  "django__django-13551",
+  "django__django-12262",
+  "sympy__sympy-21379",
+  "sympy__sympy-15345",
+  "django__django-14311",
+  "django__django-11206",
+  "django__django-15268",
+  "django__django-13794",
+  "django__django-16938",
+  "sympy__sympy-18211",
+  "django__django-14351",
+  "django__django-13023",
+  "django__django-13112",
+  "sympy__sympy-13757",
+  "django__django-12663",
+  "sympy__sympy-19495",
+  "django__django-16560",
+  "django__django-15695",
+  "sympy__sympy-17318",
+  "sympy__sympy-16792",
+  "django__django-11333",
+  "django__django-13568",
+  "sympy__sympy-20590",
+  "django__django-13158",
+  "django__django-11964",
+  "django__django-15525",
+  "django__django-12754",
+  "sympy__sympy-13974",
+  "django__django-13297"
+ ],
+ "tasks": {
+  "django__django-11141": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-11149": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-11206": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-11239": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-11265": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-11299": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-11333": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-11490": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-11555": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-11740": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-11964": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-12125": {
+   "repo": "django/django",
+   "resolved_by": 5
+  },
+  "django__django-12262": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-12273": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-12308": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-12325": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-12663": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-12754": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-12774": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-13023": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13033": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-13112": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-13121": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-13128": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13158": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13297": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13346": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-13406": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-13551": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13568": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13794": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-13807": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-14122": {
+   "repo": "django/django",
+   "resolved_by": 5
+  },
+  "django__django-14311": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-14351": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-14376": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-14580": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-14631": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "django__django-15037": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-15127": {
+   "repo": "django/django",
+   "resolved_by": 3
+  },
+  "django__django-15161": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-15268": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-15525": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-15695": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-15732": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-15916": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-16032": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-16082": {
+   "repo": "django/django",
+   "resolved_by": 5
+  },
+  "django__django-16315": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-16454": {
+   "repo": "django/django",
+   "resolved_by": 4
+  },
+  "django__django-16560": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-16938": {
+   "repo": "django/django",
+   "resolved_by": 1
+  },
+  "django__django-17084": {
+   "repo": "django/django",
+   "resolved_by": 2
+  },
+  "sympy__sympy-12419": {
+   "repo": "sympy/sympy",
+   "resolved_by": 3
+  },
+  "sympy__sympy-13031": {
+   "repo": "sympy/sympy",
+   "resolved_by": 2
+  },
+  "sympy__sympy-13615": {
+   "repo": "sympy/sympy",
+   "resolved_by": 1
+  },
+  "sympy__sympy-13757": {
+   "repo": "sympy/sympy",
+   "resolved_by": 5
+  },
+  "sympy__sympy-13798": {
+   "repo": "sympy/sympy",
+   "resolved_by": 1
+  },
+  "sympy__sympy-13877": {
+   "repo": "sympy/sympy",
+   "resolved_by": 5
+  },
+  "sympy__sympy-13974": {
+   "repo": "sympy/sympy",
+   "resolved_by": 1
+  },
+  "sympy__sympy-15017": {
+   "repo": "sympy/sympy",
+   "resolved_by": 4
+  },
+  "sympy__sympy-15345": {
+   "repo": "sympy/sympy",
+   "resolved_by": 4
+  },
+  "sympy__sympy-15599": {
+   "repo": "sympy/sympy",
+   "resolved_by": 2
+  },
+  "sympy__sympy-16792": {
+   "repo": "sympy/sympy",
+   "resolved_by": 2
+  },
+  "sympy__sympy-17318": {
+   "repo": "sympy/sympy",
+   "resolved_by": 4
+  },
+  "sympy__sympy-18211": {
+   "repo": "sympy/sympy",
+   "resolved_by": 2
+  },
+  "sympy__sympy-19040": {
+   "repo": "sympy/sympy",
+   "resolved_by": 1
+  },
+  "sympy__sympy-19495": {
+   "repo": "sympy/sympy",
+   "resolved_by": 5
+  },
+  "sympy__sympy-19783": {
+   "repo": "sympy/sympy",
+   "resolved_by": 4
+  },
+  "sympy__sympy-20590": {
+   "repo": "sympy/sympy",
+   "resolved_by": 1
+  },
+  "sympy__sympy-21379": {
+   "repo": "sympy/sympy",
+   "resolved_by": 3
+  }
+ }
+}

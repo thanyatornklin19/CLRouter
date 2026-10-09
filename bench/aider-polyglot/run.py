@@ -13,19 +13,21 @@ See ../PROTOCOL.md for what a result may be used to claim.
 """
 import argparse
 import json
-import math
-import os
 import pathlib
 import random
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 import prepare  # test_command, test_env
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from stats import bootstrap_diff, sign_test, wilson  # noqa: E402
 
 PROMPT = (
     'INSTRUCTIONS.md describes a programming exercise. Implement it by editing {files}. '
@@ -204,34 +206,6 @@ def retry_failed(rows: list[dict], tasks_by_name: dict, args, workroot: pathlib.
         row['audit'], row['seen'] = audit(workdir, workroot, pathlib.Path(args.store).expanduser())
 
 
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
-        return (0.0, 0.0)
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return (max(0.0, c - h), min(1.0, c + h))
-
-
-def per_task_rate(rows: list[dict], model: str) -> dict[str, float]:
-    by: dict[str, list[bool]] = {}
-    for r in rows:
-        if r['model'] == model:
-            by.setdefault(r['task'], []).append(r['passed'])
-    return {t: sum(v) / len(v) for t, v in by.items()}
-
-
-def bootstrap_diff(a: dict[str, float], b: dict[str, float], iters: int = 5000, seed: int = 1) -> tuple[float, float, float]:
-    tasks = sorted(set(a) & set(b))
-    if not tasks:
-        return (0.0, 0.0, 0.0)
-    rng = random.Random(seed)
-    base = sum(a[t] - b[t] for t in tasks) / len(tasks)
-    sims = sorted(sum(a[t] - b[t] for t in (rng.choice(tasks) for _ in tasks)) / len(tasks) for _ in range(iters))
-    return base, sims[int(0.025 * iters)], sims[int(0.975 * iters)]
-
-
 def at2(r: dict) -> bool:
     return bool(r['passed'] or r.get('passed2'))
 
@@ -263,8 +237,7 @@ def summarize(rows: list[dict], models: list[str], effort: str) -> str:
                 shared = set(per[a]) & set(per[b])
                 only_a = sum(1 for t in shared if per[a][t] > per[b][t])
                 only_b = sum(1 for t in shared if per[b][t] > per[a][t])
-                n = only_a + only_b
-                p = min(1.0, 2 * sum(math.comb(n, i) for i in range(min(only_a, only_b) + 1)) / 2 ** n) if n else 1.0
+                p = sign_test(only_a, only_b)
                 lines.append(f'- {a} − {b}: {d * 100:+.1f} points ({lo * 100:+.1f} to {hi * 100:+.1f}); {a} alone {only_a}, {b} alone {only_b}, exact p = {p:.3f}')
     errors = [r for r in rows if r['error'] or r.get('error2')]
     if errors:
