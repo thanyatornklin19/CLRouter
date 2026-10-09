@@ -46,24 +46,34 @@ Per-prompt routing is not free. Your conversation is prompt-cached on the model 
 
 So CLRouter never offers a downgrade once the context passes `downgradeMaxContext` (30k tokens by default), and the question tells you when a switch will re-read a large context. Upgrades are always offered: when a task needs a stronger model, quality beats the cache.
 
-## `/clrouter:dev`: a cost-tiered cascade (experimental, being benchmarked)
+## `/clrouter:dev`: a cascade with locked tests (experimental)
 
 ```
 /clrouter:dev Add rate limiting to the /login endpoint, with tests
 ```
 
-1. **Opus writes the acceptance tests** from the task, before any code exists. This is where the expensive model's judgment goes: deciding what "done" means, including domain rules the task only implies.
-2. **The tests are locked.** They are archived and restored before every run, so the coder can't make them pass by editing them.
+1. **Sonnet writes the acceptance tests** from the task, before any code exists. They encode what the task requires, including domain rules it only implies.
+2. **The tests are locked.** They are archived and restored before every run, so the coder can't pass by editing them.
 3. **The cheapest model that passes writes the code.** It tries `haiku`, `haiku` again, then `sonnet`, then `opus`, and stops at the first attempt whose tests pass.
 4. **Haiku runs the steps and writes the summary.**
 
-**Why it changed.** The previous version planned on Opus, coded on Sonnet and reviewed on Opus. Measured, it cost more than a single model for the same result:
+### What it's good for, measured
 
-- On a small task: $0.81, against $0.14 for Opus alone.
-- On a well-specified hard task: $1.09, against $0.05 for Haiku alone. All four approaches passed the 48 hidden tests.
-- Its coder-written tests missed 2 of 3 bugs planted to check them.
+The benchmark in [`bench/thai-tax`](bench/thai-tax) builds a Thai income tax web app. Each approach is scored by 20 hidden tests and a real browser:
 
-The cascade is being benchmarked against single models now. This section will carry the numbers, whichever way they go.
+| Approach | Avg cost | Hidden tests |
+| --- | --- | --- |
+| Sonnet alone | $0.16 | 20/20, 20/20 |
+| Haiku alone | $0.07 | 18/20, 19/20 |
+| Opus alone | $0.51 | 20/20, 19/20 |
+| Cascade, Sonnet tests | $0.26 | 20/20 |
+| Cascade, Opus tests | $0.76 | 20/20, 20/20 |
+
+- **The cascade buys correctness, not savings.** In every cascade run, Haiku wrote the code that passed, and it scored 20/20. Alone, Haiku shipped polished pages with wrong tax caps. The locked tests carried the rules it didn't know.
+- **On a task this size, the cascade cost more than Sonnet alone.** Writing the tests costs about as much as writing the code. It can only save money when the code is much bigger than its tests, and that isn't measured yet.
+- **That's why Sonnet writes the tests.** Opus tests cost 3× as much for the same score.
+
+**Known issue.** When a stage runs long, Claude Code can finish it in a new turn. That turn runs on your session's model instead of Haiku. It cost $0.14 extra on a Sonnet session, and it would cost more on Opus.
 
 To change a stage's model, edit `model:` in `agents/*.md`, or the attempt order in `commands/dev.md`.
 
@@ -108,6 +118,7 @@ Layout:
 - `hooks/router.ts`: the heuristic scorer. Pure functions; tune the signals here.
 - `hooks/register.ts`: the hooks (prompt, turn, command) and the dialog.
 - `agents/`, `commands/dev.md`: the `/clrouter:dev` cascade's stages.
+- `bench/`: benchmarks with hidden tests, for checking claims before they go in this README.
 - `types/index.d.ts`: the session state the plugin keeps.
 - `tests/`: `claude plugin test` suites.
 
@@ -133,9 +144,14 @@ CLRouter คือปลั๊กอินของ Claude Code ที่เล�
 - ถ้าโมเดลที่เลือกตอบไม่ได้ (id ผิด ไม่มีสิทธิ์ใช้) จะส่งใหม่ด้วยโมเดลของ session อัตโนมัติ
 - ลองดูว่า prompt ไหนจะได้โมเดลอะไร: `/clrouter test <ข้อความ>`
 
-**`/clrouter:dev <งาน>` (ทดลอง, กำลังวัดผล)**: Opus เขียน acceptance tests จากโจทย์ก่อนมีโค้ด แล้วล็อกไว้ (คืนค่าเดิมทุกครั้งก่อนรัน แก้เทสต์ให้ผ่านไม่ได้) จากนั้นให้โมเดลถูกที่สุดเขียนโค้ด ลอง Haiku → Haiku → Sonnet → Opus หยุดที่ตัวแรกที่ผ่าน
+**`/clrouter:dev <งาน>` (ทดลอง)**: Sonnet เขียน acceptance tests จากโจทย์ก่อนมีโค้ด แล้วล็อกไว้ (คืนค่าเดิมก่อนรันทุกครั้ง แก้เทสต์ให้ผ่านไม่ได้) จากนั้นให้โมเดลถูกที่สุดเขียนโค้ด ลอง Haiku → Haiku → Sonnet → Opus หยุดที่ตัวแรกที่ผ่าน
 
-แบบเดิม (Opus วางแผน/รีวิว) วัดแล้วแพงกว่าใช้โมเดลเดียวโดยได้ผลเท่ากัน จึงเปลี่ยนเป็นแบบนี้ ผลวัดของแบบใหม่จะใส่ไว้ที่นี่ ไม่ว่าจะออกมาดีหรือแย่
+ผลวัดจากโจทย์สร้างเว็บคำนวณภาษีไทย ([`bench/thai-tax`](bench/thai-tax)):
+
+- **Sonnet ตัวเดียวคุ้มที่สุด**: $0.16 ถูก 20/20 ทั้ง 2 รอบ
+- **Haiku ตัวเดียวถูกที่สุด ($0.07) แต่คำนวณภาษีผิดแบบเงียบๆ**: หน้าเว็บสวย แต่ใช้เพดานลดหย่อนผิด รอบละข้อ
+- **Opus ตัวเดียวไม่ได้ปลอดภัยกว่า**: รอบสองพลาดเพดาน PVD 15%
+- **cascade ช่วยเรื่องความถูกต้อง ไม่ได้ช่วยประหยัด**: Haiku เขียนโค้ดผ่านเทสต์ที่ล็อกไว้ได้ 20/20 ทุกรอบ แต่รวมแล้วแพงกว่า Sonnet ตัวเดียว ($0.26) เพราะงานขนาดนี้ค่าเขียนเทสต์พอๆ กับค่าเขียนโค้ด
 
 ## License
 

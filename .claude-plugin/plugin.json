@@ -1,7 +1,7 @@
 {
   "name": "clrouter",
-  "version": "0.2.0",
-  "description": "Routes each prompt to the model that fits it, and runs dev work as a plan/build/review pipeline with a model per role.",
+  "version": "0.3.0",
+  "description": "Routes each prompt to the model that fits it, and runs dev tasks through a cascade where the cheapest model codes against locked acceptance tests.",
   "author": {
     "name": "thanyatornklin19"
   },

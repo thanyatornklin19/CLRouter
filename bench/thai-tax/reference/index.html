@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="th">
+<meta charset="utf-8">
+<title>คำนวณภาษี (อ้างอิง)</title>
+<label>เงินเดือนทั้งปี <input id="salary" type="number"></label>
+<label>ภาษีหัก ณ ที่จ่าย <input id="withheld" type="number"></label>
+<label>คู่สมรสไม่มีเงินได้ <input id="spouse" type="checkbox"></label>
+<label>ปีเกิดบุตร <input id="children"></label>
+<label>บิดามารดา <input id="parents" type="number"></label>
+<label>ประกันสังคม <input id="socialSecurity" type="number"></label>
+<label>ประกันชีวิต <input id="lifeInsurance" type="number"></label>
+<label>ประกันสุขภาพ <input id="healthInsurance" type="number"></label>
+<label>ประกันสุขภาพบิดามารดา <input id="parentsHealthInsurance" type="number"></label>
+<label>PVD <input id="providentFund" type="number"></label>
+<label>RMF <input id="rmf" type="number"></label>
+<label>SSF <input id="ssf" type="number"></label>
+<label>ดอกเบี้ยบ้าน <input id="homeLoanInterest" type="number"></label>
+<label>บริจาค <input id="donation" type="number"></label>
+<button id="calculate">คำนวณ</button>
+<p>เงินได้สุทธิ <span id="netIncome"></span></p>
+<p>ภาษี <span id="tax"></span></p>
+<p>คืน/ชำระ <span id="refund"></span></p>
+<script type="module">
+import { calculateTax } from './src/tax.js'
+const ids = ['salary', 'withheld', 'parents', 'socialSecurity', 'lifeInsurance', 'healthInsurance',
+  'parentsHealthInsurance', 'providentFund', 'rmf', 'ssf', 'homeLoanInterest', 'donation']
+document.getElementById('calculate').onclick = () => {
+  const input = Object.fromEntries(ids.map(id => [id, Number(document.getElementById(id).value) || 0]))
+  input.spouse = document.getElementById('spouse').checked
+  input.children = document.getElementById('children').value.split(',').map(s => Number(s.trim())).filter(Boolean)
+  const r = calculateTax(input)
+  for (const k of ['netIncome', 'tax', 'refund']) document.getElementById(k).textContent = r[k].toLocaleString('th-TH')
+}
+</script>
+</html>

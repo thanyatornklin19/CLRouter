@@ -1,0 +1,126 @@
+[
+ {
+  "name": "cascade-1",
+  "cost": 0.779,
+  "seconds": 256,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.016,
+   "opus-5-5": 0.624,
+   "sonnet-5-5": 0.139
+  }
+ },
+ {
+  "name": "cascade-2",
+  "cost": 0.741,
+  "seconds": 246,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.019,
+   "opus-5-5": 0.563,
+   "sonnet-5-5": 0.159
+  }
+ },
+ {
+  "name": "cascadeS-2",
+  "cost": 0.261,
+  "seconds": 182,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.02,
+   "sonnet-5-5": 0.241
+  }
+ },
+ {
+  "name": "haiku-1",
+  "cost": 0.057,
+  "seconds": 160,
+  "hidden": "18/20",
+  "hidden_failed": [
+   "health insurance 25,000, life + health together 100,000",
+   "a full return"
+  ],
+  "ui": "1/2",
+  "models": {
+   "haiku-5-5": 0.057
+  }
+ },
+ {
+  "name": "haiku-2",
+  "cost": 0.079,
+  "seconds": 154,
+  "hidden": "19/20",
+  "hidden_failed": [
+   "parents' health insurance capped at 15,000"
+  ],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.079
+  }
+ },
+ {
+  "name": "opus-1",
+  "cost": 0.44,
+  "seconds": 107,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "opus-5-5": 0.44
+  }
+ },
+ {
+  "name": "opus-2",
+  "cost": 0.575,
+  "seconds": 134,
+  "hidden": "19/20",
+  "hidden_failed": [
+   "provident fund capped at 15% of salary"
+  ],
+  "ui": "2/2",
+  "models": {
+   "opus-5-5": 0.575
+  }
+ },
+ {
+  "name": "pipeline-1",
+  "cost": 0.718,
+  "seconds": 161,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "haiku-5-5": 0.003,
+   "opus-5-5": 0.355,
+   "sonnet-5-5": 0.36
+  }
+ },
+ {
+  "name": "sonnet-1",
+  "cost": 0.154,
+  "seconds": 55,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "sonnet-5-5": 0.154
+  }
+ },
+ {
+  "name": "sonnet-2",
+  "cost": 0.157,
+  "seconds": 58,
+  "hidden": "20/20",
+  "hidden_failed": [],
+  "ui": "2/2",
+  "models": {
+   "sonnet-5-5": 0.157
+  }
+ }
+]

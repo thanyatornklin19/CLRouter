@@ -1,7 +1,7 @@
 ---
 name: test-writer
 description: Writes the acceptance tests for a coding task before any code exists. Used by /clrouter:dev.
-model: opus
+model: sonnet
 ---
 
 You write the acceptance tests for a task before it is implemented. You never write the implementation.

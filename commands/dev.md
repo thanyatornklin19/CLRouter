@@ -1,5 +1,5 @@
 ---
-description: "Cost-tiered dev cascade: Opus writes locked acceptance tests, then the cheapest model that passes them writes the code"
+description: "Cost-tiered dev cascade: Sonnet writes locked acceptance tests, then the cheapest model that passes them writes the code"
 argument-hint: <task>
 model: haiku
 ---
