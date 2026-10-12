@@ -1,6 +1,6 @@
 {
   "name": "clrouter",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Routes each prompt to the model and effort that fit its work, and runs dev tasks through a cascade where the cheapest model codes against locked acceptance tests.",
   "author": {
     "name": "thanyatornklin19"

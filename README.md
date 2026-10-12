@@ -54,6 +54,7 @@ It works with an API key or a Pro/Max plan.
 - **Picks the effort.** Low for answers, medium for code, high for deep work. Never max.
 - **Switches only when it's cheaper**, counting the cache it has to rebuild.
 - **Learns your answers.** Say yes twice and it stops asking. Say no three times and it stops offering.
+- **Recovers from a miss.** Correct a cheaper model ("that's wrong") and the correction runs on your own model. Interrupt it and `/clrouter redo` sends the prompt again there. Each miss counts against that switch.
 - **Shows what it saved**, in dollars and in your five-hour window:
 
 ```
@@ -72,9 +73,12 @@ CLRouter, last 7 days: 212 turns.
 | :-- | :-- |
 | `/clrouter` | Shows the mode, what it has learned, and the last call it made. |
 | `/clrouter stats [days]` | Shows cost, savings and the five-hour window. |
+| `/clrouter redo [model]` | Puts your last routed prompt back in the box, to run on your model or the one named. |
+| `/clrouter doctor` | Checks your setup: Claude Code version, model ids, prices, five-hour reading. |
 | `/clrouter test <prompt>` | Shows which model and effort a prompt gets, and why. |
 | `/clrouter ask \| auto \| suggest \| off` | Sets the mode for this session. |
 | `/clrouter forget` | Clears your learned answers. |
+| `/clrouter collect on` · `export` | Keeps your prompts on this machine, then writes them to a file you can label. |
 | `/clrouter:dev <task>` | Writes locked tests, then has the cheapest model that passes them write the code. Experimental. |
 
 ## Should you use it?
@@ -82,21 +86,21 @@ CLRouter, last 7 days: 212 turns.
 Yes, as a beta, in the default `ask` mode: nothing switches without your click.
 
 1. Install it and keep `ask` for a week.
-2. Check `/clrouter stats` for what it saved and how often you said no.
-3. If you rarely say no, switch to `/clrouter auto`.
+2. Check `/clrouter stats` for what it saved, how often you said no, and how often a switch missed.
+3. If you rarely say no and misses are rare, switch to `/clrouter auto`.
 
 Pick Opus yourself for architecture or a bug that spans services, and keep tests around if you accept Haiku for code. If you need a guaranteed cost or quality number for a team, wait: nothing here meets that bar yet.
 
 ## Good to know
 
-- **Beta.** It's built on Claude Code's early-access plugin API (tested on 2.1.295), which can change.
+- **Beta.** It's built on Claude Code's early-access plugin API, which can change. It's tested on Claude Code 2.1.287 (stable) to 2.1.296 (latest), and [CI](.github/workflows/ci.yml) re-checks both channels daily. On any other version it says so once; `/clrouter doctor` shows what it sees.
 - **Accuracy.** On prompts it was never tuned on, it picked right 14 times in 20. It never sent code or exact rules to Haiku.
 - **Savings are a floor.** They are never overstated, and a loss is shown as a loss.
-- **`/clrouter:dev` is experimental.** A long stage can finish on your session's model instead of its own ([known issue](docs/how-it-works.md)).
-- **Not measured yet:** routing for Opus-level work, savings in real use, and the five-hour reading on a real Pro account.
+- **`/clrouter:dev` is experimental.** The bug where a long stage finished on your session's model is fixed in the hooks and covered by tests, but not yet seen in a live run.
+- **Not measured yet:** routing for Opus-level work, savings in real use, and the five-hour reading on a real Pro account. On a Pro or Max plan, `/clrouter doctor` answers the last one in five seconds.
 
 ## Help it get better
 
-The most useful thing you can send is prompts: real ones from your own work, redacted, each with the model you'd have wanted. They let the router be measured on work it wasn't built from. [Open an issue →](https://github.com/thanyatornklin19/CLRouter/issues)
+The most useful thing you can send is prompts: real ones from your own work, each with the model you'd have wanted. `/clrouter collect on` keeps them on your machine; after a week, `/clrouter export` writes them to a file with an empty `want` on each line. Fill it in, delete anything private, and attach it to an issue. That measures the router on work it wasn't built from. [Open an issue →](https://github.com/thanyatornklin19/CLRouter/issues)
 
 <sub>[How it works](docs/how-it-works.md) · [Benchmarks](bench) · MIT</sub>

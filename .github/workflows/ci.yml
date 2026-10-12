@@ -1,0 +1,39 @@
+name: CI
+
+# The plugin runs on Claude Code's early-access plugin API, which can change
+# in any release. This checks it on the stable and latest channels on every
+# push, and daily, so a release that breaks it shows up within a day.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Claude Code (${{ matrix.channel }})
+        run: npm install --global @anthropic-ai/claude-code@${{ matrix.channel }}
+      - run: claude --version
+      - name: Validate the plugin
+        run: claude plugin validate .
+      - name: Run the tests
+        run: claude plugin test .
+      - name: Flag a release outside the tested range
+        if: matrix.channel == 'latest'
+        run: |
+          release=$(claude --version | cut -d' ' -f1)
+          to=$(grep -o "TESTED_TO = '[0-9.]*'" hooks/register.ts | grep -o "[0-9][0-9.]*")
+          if [ "$(printf '%s\n%s\n' "$to" "$release" | sort -V | tail -1)" != "$to" ]; then
+            echo "::warning::Claude Code $release is newer than the tested range (to $to). Tests passed on it: bump TESTED_TO in hooks/register.ts."
+          fi

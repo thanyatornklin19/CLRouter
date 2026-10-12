@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { CLASSIFIER_LABELS } from '../hooks/router'
+import { isTestedRelease } from '../hooks/register'
 
 const SESSION_MODEL = 'claude-opus-5-5'
 const HAIKU = 'claude-haiku-5-5'
@@ -18,6 +19,13 @@ type World = {
   /** The session's cost ledger and five-hour window, as the status line reads them. */
   spent: number
   fiveHour: number
+  /** Every prompt that entered, toasts shown, files written, the engine's version. */
+  texts: string[]
+  toasts: string[]
+  files: Record<string, string>
+  version: string
+  /** What a plugin put in the prompt box. */
+  box: string
 }
 
 // The engine beneath the plugin: the session's model and context, the
@@ -39,6 +47,11 @@ function world(
     efforts: [],
     spent: 0,
     fiveHour: 10,
+    texts: [],
+    toasts: [],
+    files: {},
+    version: '2.1.296',
+    box: '',
   }
   mock.env(on, env)
   mock.store(on)
@@ -60,7 +73,23 @@ function world(
   })
   on('ui.status', () => ({ value: undefined }))
   on('ui.log', () => ({ value: undefined }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', ($, e) => {
+    state.toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('session.version', () => ({ value: { version: state.version, base: state.version } }))
+  on('session.cwd', () => ({ value: '/work' }))
+  on('session.messages', () => ({ value: state.texts.map(text => ({ role: 'user' as const, text, toolUses: [] })) }))
+  on('fs.write', ($, e) => {
+    state.files[e.path] = e.text
+    return { value: undefined }
+  })
+  on('command.run', { command: 'clrouter:dev' }, () => ({ text: '' }))
+  on('prompt.fill', ($, e) => {
+    state.box = e.text
+    return { isFilled: true }
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('turn.step', async function* ($, e) {
@@ -71,6 +100,7 @@ function world(
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason, usage: null }
   })
   on('prompt.submit', async ($, e) => {
+    state.texts.push(e.text)
     state.turns += 1
     await engine.turn.start({ text: e.text, turnId: `t${state.turns}` })
     return { text: e.text }
@@ -402,5 +432,156 @@ describe('learning from answers', () => {
     expect(state.asked).toHaveLength(0)
     expect(await runTurn($, state)).toBe(SESSION_MODEL)
     expect(state.efforts.at(-1)).toBe('unset')
+  })
+})
+
+describe('catching misses', () => {
+  const presentation = { isFullscreen: false, columns: 80 }
+  const run = ($: Engine, args: string) =>
+    $.command.run({ command: 'clrouter', args, origin: { kind: 'composer' }, presentation })
+
+  test('a correction after a cheaper model runs on the session model, without asking', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    expect(await runTurn($, state)).toBe(HAIKU)
+
+    // Alone, this reads as a question: the router would offer Haiku again.
+    await $.prompt.submit(submit("that's wrong, explain what a closure is again"))
+    expect(state.asked).toHaveLength(1)
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+    expect(state.toasts.at(-1)).toContain('Back on Opus')
+    expect((await run($, 'stats')).text).toContain('Misses: 1 of 1 routed turns')
+  })
+
+  test('a correction counts against the move: a learned rule asks again', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    for (const prompt of ['what is a closure in JavaScript?', 'explain the difference between let and const']) {
+      await $.prompt.submit(submit(prompt))
+      await runTurn($, state)
+    }
+    await $.prompt.submit(submit('how does useEffect cleanup work?'))
+    expect(await runTurn($, state)).toBe(HAIKU)
+    expect(state.asked).toHaveLength(2)
+
+    await $.prompt.submit(submit('still wrong'))
+    await runTurn($, state)
+    await $.prompt.submit(submit('what does HTTP 429 mean'))
+    expect(state.asked).toHaveLength(3)
+  })
+
+  test('the same words after a turn on the session model are routed as usual', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+
+    await $.prompt.submit(submit("that's wrong, explain what a closure is again"))
+    expect(state.asked).toHaveLength(2)
+  })
+
+  test('/clrouter redo sends the last routed prompt again on the session model', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    expect(await runTurn($, state, true)).toBe(HAIKU)
+    expect(state.toasts.at(-1)).toContain('/clrouter redo')
+
+    expect((await run($, 'redo')).text).toBe('Your last prompt is back in the prompt box. Press Enter to run it on Opus.')
+    expect(state.box).toBe('what is a closure in JavaScript?')
+
+    // Sent unchanged, it runs on Opus without asking.
+    await $.prompt.submit(submit(state.box))
+    expect(state.asked).toHaveLength(1)
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+  })
+
+  test('/clrouter redo can name the model, and refuses the one that already ran', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    expect((await run($, 'redo')).text).toContain('Nothing to redo')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    await runTurn($, state)
+
+    expect((await run($, 'redo haiku')).text).toContain('already ran on Haiku')
+    expect((await run($, 'redo sonnet')).text).toContain('run it on Sonnet')
+    await $.prompt.submit(submit(state.box))
+    expect(await runTurn($, state)).toBe('claude-sonnet-5-5')
+  })
+
+  test('an edited prompt after /clrouter redo is routed as usual', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Use Haiku for this prompt')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    await runTurn($, state, true)
+    await run($, 'redo')
+
+    await $.prompt.submit(submit('explain the difference between let and const'))
+    expect(state.asked).toHaveLength(2)
+  })
+})
+
+describe('/clrouter:dev stages', () => {
+  const notification = { text: 'Agent finished: tests pass', wait: false, origin: { kind: 'task-notification' as const } }
+
+  test('a stage reporting back during a cascade runs on Haiku, not the session model', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    await $.command.run({
+      command: 'clrouter:dev',
+      args: 'add rate limiting',
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: false, columns: 80 },
+    })
+    await $.prompt.submit(notification)
+    expect(await runTurn($, state)).toBe(HAIKU)
+  })
+
+  test('without a cascade, notifications keep the session model', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    await $.prompt.submit(notification)
+    expect(await runTurn($, state)).toBe(SESSION_MODEL)
+  })
+})
+
+describe('checking the setup', () => {
+  test('knows the tested range of Claude Code releases', () => {
+    expect(isTestedRelease('2.1.287')).toBe(true)
+    expect(isTestedRelease('2.1.290-dev')).toBe(true)
+    expect(isTestedRelease('2.1.296')).toBe(true)
+    expect(isTestedRelease('2.1.286')).toBe(false)
+    expect(isTestedRelease('2.1.297')).toBe(false)
+    expect(isTestedRelease('2.2.0')).toBe(false)
+  })
+
+  const presentation = { isFullscreen: false, columns: 80 }
+  const run = ($: Engine, args: string) =>
+    $.command.run({ command: 'clrouter', args, origin: { kind: 'composer' }, presentation })
+  const start = ($: Engine) => $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+
+  test('/clrouter doctor reports the version, models, window and prices', OPTIONS, async ($, on) => {
+    world($, on, 'Keep Opus')
+    const text = (await run($, 'doctor')).text
+    expect(text).toContain('CLRouter 0.7.0 on Claude Code 2.1.296: in the tested range (2.1.287 to 2.1.296)')
+    expect(text).toContain('Haiku: haiku → claude-haiku-5-5')
+    expect(text).toContain('Five-hour window: 10% used')
+    expect(text).toContain('list prices as of')
+  })
+
+  test('warns once on a Claude Code version it was not tested on', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus')
+    on('command.register', ($, e) => ({ value: { command: e.name } }))
+    state.version = '9.9.9'
+    await start($)
+    await start($)
+    expect(state.toasts.filter(t => t.includes("wasn't tested on Claude Code 9.9.9"))).toHaveLength(1)
+    expect((await run($, 'doctor')).text).toContain('outside the tested range')
+  })
+
+  test('exports prompts with the router call and an empty label, and keeps them only when asked', OPTIONS, async ($, on) => {
+    const state = world($, on, 'Keep Opus', 1000, { HOME: '/home/me' })
+    expect((await run($, 'collect on')).text).toContain('keeps your next prompts')
+    await $.prompt.submit(submit('what is a closure in JavaScript?'))
+    await runTurn($, state)
+
+    expect((await run($, 'export')).text).toContain('Wrote 1 prompts to /home/me/clrouter-prompts.jsonl')
+    const line = JSON.parse((state.files['/home/me/clrouter-prompts.jsonl'] ?? '').trim())
+    expect(line).toEqual({ prompt: 'what is a closure in JavaScript?', router: 'haiku', kind: 'answer', confidence: 'high', want: '' })
+
+    expect((await run($, 'collect off')).text).toContain('deleted')
   })
 })

@@ -17,6 +17,9 @@ export const PRICES: Record<Tier, Price> = {
   opus: { input: 4, output: 20, cacheRead: 0.2 },
 }
 
+/** When the prices above were read; `/clrouter doctor` shows it, so stale prices are visible. */
+export const PRICES_AS_OF = '2026-10-06'
+
 const CACHE_WRITE = 1.25
 
 export type Tokens = { input: number; output: number; cacheRead: number; cacheWrite: number }
@@ -71,6 +74,8 @@ export type TurnRecord = {
   accepted: boolean | null
   /** The person interrupted the turn. */
   aborted: boolean
+  /** A routed turn the person corrected or re-sent on another model afterwards. */
+  miss?: boolean
   /** The turn's own tokens priced on the tier that answered. */
   usd: number
   /** Routed turns: at least what the session's tier would have cost. */
@@ -139,6 +144,15 @@ export function learn(pref: Pref | undefined, accepted: boolean): Pref {
   }
   const no = p.no + 1
   return { yes: 0, no, rule: no >= NEVER_AFTER ? 'never' : null }
+}
+
+/**
+ * The preference after a routed turn missed (interrupted, corrected, sent
+ * again on another model): a learned "auto" is dropped at once, so the
+ * next such prompt asks again; otherwise it counts as a no.
+ */
+export function afterMiss(pref: Pref | undefined): Pref {
+  return pref?.rule === 'auto' ? { yes: 0, no: 1, rule: null } : learn(pref, false)
 }
 
 /** A move in words: "build work on Opus → Sonnet". */
@@ -218,9 +232,11 @@ export function summarize(records: readonly TurnRecord[], now: number, days: num
     lines.push(`- Asked ${asked.length} times: you switched ${switched}, kept ${asked.length - switched}.`)
   }
 
-  const interrupted = routed.filter(r => r.aborted).length
-  if (interrupted > 0) {
-    lines.push(`- You interrupted ${interrupted} routed turns: a sign the model was wrong for them.`)
+  const missed = routed.filter(r => r.aborted || r.miss === true).length
+  if (missed > 0) {
+    lines.push(
+      `- Misses: ${missed} of ${routed.length} routed turns (${Math.round((missed / routed.length) * 100)}%) were interrupted, corrected or sent again on another model.`,
+    )
   }
 
   return lines.join('\n')

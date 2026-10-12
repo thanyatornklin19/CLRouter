@@ -172,6 +172,17 @@ const MECHANICAL = /\b(typos?|spelling|rename|reformat|format|indent)\b|คำ�
 const FOLLOW_UP =
   /^(y(es)?|yep|yeah|ok(ay)?|sure|go( ahead| on)?|continue|proceed|do it|lgtm|sounds good|next|ต่อ(เลย)?|ทำต่อ|ไปต่อ|ได้(เลย)?|โอเค|ตกลง|ใช่)[\s.!]*$/i
 
+// The person saying the last answer missed: a correction, not new work.
+// After a turn a cheaper model ran, such a prompt goes back to the
+// session's model instead of being routed down again.
+const CORRECTION =
+  /\b(wrong|incorrect|(does|did|is)n'?t work|(does|did) not work|not working|still (fails?|failing|broken|wrong|not)|that'?s not (it|right|what)|not what i (asked|meant|wanted)|try again|you (broke|missed))\b|ผิด|ไม่ถูก|ไม่ใช่แบบนี้|ยังไม่ได้|ยังไม่ผ่าน|ยังพัง|ใช้ไม่ได้|ทำใหม่|แก้ใหม่/i
+
+/** Whether the prompt says the previous answer was wrong. */
+export function isCorrection(text: string): boolean {
+  return CORRECTION.test(typedText(text))
+}
+
 // Hosts wrap the typed prompt in blocks of their own (a reminder, the IDE's
 // selection, a command's echo). Those are not the person's words: scored,
 // a two-letter "yo" reads as a four-thousand-character brief.

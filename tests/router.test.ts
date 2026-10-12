@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { effortFor, modelTitle, route, tierInText, tierOfModel } from '../hooks/router'
+import { effortFor, isCorrection, modelTitle, route, tierInText, tierOfModel } from '../hooks/router'
 
 const MODELS = { haiku: 'haiku', sonnet: 'sonnet', opus: 'opus' }
 
@@ -148,5 +148,19 @@ describe('model names', () => {
   test('reads a tier typed under Other', async () => {
     expect(tierInText('use sonnet please')).toBe('sonnet')
     expect(tierInText('whatever')).toBeUndefined()
+  })
+})
+
+describe('isCorrection', () => {
+  test('reads a correction, in English and Thai', () => {
+    for (const text of ["that's wrong", 'still failing after your change', "it doesn't work", 'not what I asked', 'ผิดครับ', 'ยังไม่ได้เลย', 'แก้ใหม่']) {
+      expect(isCorrection(text)).toBe(true)
+    }
+  })
+
+  test('leaves new requests alone', () => {
+    for (const text of ['what is a closure in JavaScript?', 'add a login page', 'ok do it', 'ทำต่อ']) {
+      expect(isCorrection(text)).toBe(false)
+    }
   })
 })

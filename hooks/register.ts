@@ -7,6 +7,7 @@ import {
   TIERS,
   effortFor,
   isClassifiable,
+  isCorrection,
   kindOfTier,
   modelTitle,
   route,
@@ -20,7 +21,9 @@ import {
 import type { Effort, Kind, Route, Tier } from './router'
 import {
   LEDGER_MAX,
+  PRICES_AS_OF,
   WARM_MS,
+  afterMiss,
   describeMove,
   expectedOutput,
   learn,
@@ -31,6 +34,28 @@ import {
   switchPays,
 } from './ledger'
 import type { Pref, TurnRecord } from './ledger'
+
+const PLUGIN = 'clrouter'
+const VERSION = '0.7.0'
+// The Claude Code releases CI runs this version on: the stable channel's
+// and the latest. Outside that range a toast says so once, and
+// `/clrouter doctor` shows what the plugin can see.
+const TESTED_FROM = '2.1.287'
+const TESTED_TO = '2.1.296'
+
+/** Whether a release (`2.1.290`, or `2.1.290-dev`) lies in the tested range. */
+export function isTestedRelease(release: string): boolean {
+  const parts = (v: string) => v.split('-')[0]?.split('.').map(Number) ?? []
+  const compare = (a: string, b: string): number => {
+    const [x, y] = [parts(a), parts(b)]
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const d = (x[i] ?? 0) - (y[i] ?? 0)
+      if (d !== 0) return d
+    }
+    return 0
+  }
+  return compare(release, TESTED_FROM) >= 0 && compare(release, TESTED_TO) <= 0
+}
 
 const MODES: readonly ClrouterMode[] = ['ask', 'auto', 'suggest', 'off']
 const JUDGES = ['heuristic', 'hybrid', 'model'] as const
@@ -43,6 +68,20 @@ type EffortMode = (typeof EFFORT_MODES)[number]
 const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
 
 const CLASSIFIER_CHARS = 4000
+
+// A correction this soon after a turn a cheaper model ran goes back to the
+// session's model.
+const CORRECTION_MS = 30 * 60_000
+
+// While a /clrouter:dev cascade may still be running, a background stage's
+// notification turn runs on Haiku, the dispatcher's model, instead of the
+// session's: the engine would otherwise start that turn on the session's.
+const DEV_COMMAND = 'clrouter:dev'
+const CASCADE_MS = 2 * 3_600_000
+
+// Prompts kept for `/clrouter export` after `/clrouter collect on`, newest last.
+const SAMPLES_MAX = 300
+const SAMPLE_CHARS = 4000
 
 // `turn.step` sends the model name it is given as is, so an alias is
 // resolved here: the provider's own pin first (ANTHROPIC_DEFAULT_*_MODEL,
@@ -76,6 +115,32 @@ type Pending = {
   accepted: boolean | null
   /** The move a learned rule applied, so an interrupt can take it back. */
   learnedMove: string | null
+  /** The move this route makes, when it switches models; a miss counts against it. */
+  move: string | null
+  /** The prompt as typed, kept in memory for `/clrouter redo`. */
+  text: string
+}
+
+// The last main turn, when CLRouter sent it to another model: what a
+// correction, an interrupt or `/clrouter redo` acts on. Null after a turn
+// on the session's own model.
+type Routed = {
+  text: string
+  kind: Kind
+  move: string | null
+  at: number
+  from: Tier | null
+  ran: Tier | null
+  /** Already counted as a miss, so it isn't counted twice. */
+  missed: boolean
+}
+
+type Sample = {
+  at: number
+  prompt: string
+  router: Tier | null
+  kind: Kind | null
+  confidence: 'high' | 'low' | null
 }
 
 // The session's spend and five-hour window, as the status line has them.
@@ -83,6 +148,9 @@ type Reading = { spent: number | null; fiveHour: number | null; resetsAt: string
 
 const LEDGER_KEY = 'ledger'
 const PREFS_KEY = 'prefs'
+const SAMPLES_KEY = 'samples'
+const COLLECT_KEY = 'collect'
+const WARNED_KEY = 'warnedVersion'
 
 async function reading($: EngineInterface): Promise<Reading> {
   try {
@@ -328,16 +396,131 @@ async function keepRecord(
   }
   const ledger = await readLedger($)
   await $.store.set(LEDGER_KEY, [...ledger, row].slice(-LEDGER_MAX))
-
-  // An interrupt on a turn a learned rule routed: the rule was wrong here.
-  if (e.isAborted && route?.learnedMove != null) {
-    const prefs = await readPrefs($)
-    const { [route.learnedMove]: _, ...rest } = prefs
-    await $.store.set(PREFS_KEY, rest)
-    $.ui.toast(`CLRouter asks again before ${describeMove(route.learnedMove)}.`)
-  }
-
   return row
+}
+
+/**
+ * A routed turn missed: the person interrupted it, corrected it, or sent it
+ * again on another model. Its ledger row is marked, for `/clrouter stats`,
+ * and the move counts against itself: a learned "auto" is dropped at once.
+ */
+async function recordMiss($: EngineInterface, routed: Routed): Promise<void> {
+  if (routed.missed) {
+    return
+  }
+  routed.missed = true
+  const ledger = await readLedger($)
+  const index = ledger.findLastIndex(r => r.at === routed.at)
+  const row = ledger[index]
+  if (row !== undefined) {
+    await $.store.set(LEDGER_KEY, ledger.with(index, { ...row, miss: true }))
+  }
+  if (routed.move === null) {
+    return
+  }
+  const prefs = await readPrefs($)
+  const before = prefs[routed.move]
+  const after = afterMiss(before)
+  await $.store.set(PREFS_KEY, { ...prefs, [routed.move]: after })
+  if (before?.rule === 'auto') {
+    $.ui.toast(`CLRouter asks again before ${describeMove(routed.move)}.`)
+  } else if (after.rule === 'never') {
+    $.ui.toast(`CLRouter stops offering ${describeMove(routed.move)}. /clrouter forget undoes it.`)
+  }
+}
+
+const isDown = (routed: Routed): boolean =>
+  routed.ran !== null && routed.from !== null && tierRank(routed.ran) < tierRank(routed.from)
+
+async function readSamples($: EngineInterface): Promise<Sample[]> {
+  const value = await $.store.get(SAMPLES_KEY)
+  return Array.isArray(value) ? (value as Sample[]) : []
+}
+
+// The prompt and the router's call on it, for `/clrouter export`: kept only
+// after `/clrouter collect on`, in this machine's plugin store.
+async function keepSample($: EngineInterface, text: string, verdict: Route | null): Promise<void> {
+  if ((await $.store.get(COLLECT_KEY)) !== true) {
+    return
+  }
+  const sample: Sample = {
+    at: await $.clock.now(),
+    prompt: typedText(text).slice(0, SAMPLE_CHARS),
+    router: verdict?.tier ?? null,
+    kind: verdict?.kind ?? null,
+    confidence: verdict?.confidence ?? null,
+  }
+  await $.store.set(SAMPLES_KEY, [...(await readSamples($)), sample].slice(-SAMPLES_MAX))
+}
+
+// What the plugin can see, for `/clrouter doctor`: enough for anyone to
+// check it works on their own setup, and to paste into an issue.
+async function doctor($: EngineInterface, config: Config): Promise<string> {
+  const { version, base } = await $.session.version()
+  const release = base ?? version
+  const lines = [
+    `CLRouter ${VERSION} on Claude Code ${version}: ${isTestedRelease(release) ? 'in the tested range' : 'outside the tested range'} (${TESTED_FROM} to ${TESTED_TO}).`,
+  ]
+
+  const session = await $.session.model()
+  const sessionTier = tierOfModel(session, config.models)
+  lines.push(
+    `Session model: ${session}${sessionTier === undefined ? ': not a model family CLRouter knows, so it neither routes away from it nor prices it' : ` (${tierTitle(sessionTier)})`}.`,
+  )
+  for (const tier of TIERS) {
+    const id = await resolveModel($, config.models[tier])
+    const known = tierOfModel(id, config.models) === tier
+    lines.push(`- ${tierTitle(tier)}: ${config.models[tier]} → ${id}${known ? '' : ' (not recognized as this family: check the setting)'}`)
+  }
+  lines.push(`Prices: list prices as of ${PRICES_AS_OF}. Savings use these; if Anthropic changed them since, the figures are off by that much.`)
+
+  const usage = await $.session.usage()
+  const window = usage.rateLimits.find(w => w.kind === 'five_hour')
+  lines.push(
+    window === undefined
+      ? 'Five-hour window: no reading. Normal with an API key; on a Pro or Max plan, please report this output.'
+      : `Five-hour window: ${window.percentUsed}% used, resets ${window.resetsAt ?? 'at an unknown time'}. The quota lines in /clrouter stats work here.`,
+  )
+  lines.push(`Session cost reading: ${usage.cost?.usd === undefined ? 'none' : `$${usage.cost.usd.toFixed(2)} so far`}.`)
+
+  const ledger = await readLedger($)
+  const last = ledger.at(-1)
+  lines.push(`Ledger: ${ledger.length} turns recorded${last === undefined ? '' : `, the last at ${new Date(last.at).toISOString()}`}.`)
+  const rules = Object.values(await readPrefs($)).filter(pref => pref.rule !== null).length
+  lines.push(`Learned rules: ${rules}. Judge: ${config.judge}. Effort: ${config.effort}.`)
+  const collecting = (await $.store.get(COLLECT_KEY)) === true
+  lines.push(`Prompt collection: ${collecting ? `on, ${(await readSamples($)).length} kept` : 'off'}.`)
+  return lines.join('\n')
+}
+
+// Prompts and the router's calls, one JSON object per line, with an empty
+// "want" for the person to fill: the labelled set that measures the router.
+async function exportPrompts($: EngineInterface): Promise<string> {
+  const rows = new Map<string, { prompt: string; router: Tier | null; kind: Kind | null; confidence: string | null; want: string }>()
+  for (const sample of await readSamples($)) {
+    rows.set(sample.prompt, { prompt: sample.prompt, router: sample.router, kind: sample.kind, confidence: sample.confidence, want: '' })
+  }
+  for (const message of await $.session.messages()) {
+    const prompt = typedText(message.text)
+    if (message.role !== 'user' || prompt === '' || prompt.startsWith('/') || prompt.startsWith('<') || rows.has(prompt)) {
+      continue
+    }
+    const verdict = route(prompt)
+    rows.set(prompt, { prompt: prompt.slice(0, SAMPLE_CHARS), router: verdict?.tier ?? null, kind: verdict?.kind ?? null, confidence: verdict?.confidence ?? null, want: '' })
+  }
+  if (rows.size === 0) {
+    return 'Nothing to export yet. /clrouter collect on keeps your prompts (on this machine only) from now on.'
+  }
+  // The home folder, not the project: a file of prompts in a repository is one
+  // `git add .` away from being published.
+  const home = await $.env.get('HOME')
+  const path = `${home !== undefined && home !== '' ? home : await $.session.cwd()}/clrouter-prompts.jsonl`
+  await $.fs.write(path, [...rows.values()].map(row => JSON.stringify(row)).join('\n') + '\n')
+  return [
+    `Wrote ${rows.size} prompts to ${path}.`,
+    'In each line, set "want" to haiku, sonnet or opus: the cheapest model you would trust with that prompt.',
+    'Delete any line you would not share, then attach the file to an issue. It never leaves your machine otherwise.',
+  ].join('\n')
 }
 
 export const register: Register = (on, options) => {
@@ -352,19 +535,89 @@ export const register: Register = (on, options) => {
   // When a main turn last ran on the session's own model: its cache is warm
   // for an hour after, which decides what staying would have cost.
   let warmSince: number | null = null
+  // The last main turn if it was routed; the prompt `/clrouter redo` put
+  // back in the prompt box, and the tier it runs on when the person sends it
+  // unchanged (null: the session's model); and until when a /clrouter:dev
+  // cascade may still be running.
+  let lastRouted: Routed | null = null
+  let redo: { tier: Tier | null; kind: Kind; text: string } | null = null
+  let cascadeUntil: number | null = null
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'clrouter',
       description: 'Model router: status, savings, mode, or test a prompt',
-      argumentHint: '[stats [days]|ask|auto|suggest|off|reset|forget|test <prompt>]',
+      argumentHint: '[stats [days]|redo [model]|doctor|ask|auto|suggest|off|reset|forget|collect on|off|export|test <prompt>]',
     })
+
+    // Once per Claude Code release it wasn't tested on: say so, and how to check.
+    try {
+      const { version, base } = await $.session.version()
+      const release = base ?? version
+      if (!isTestedRelease(release) && (await $.store.get(WARNED_KEY)) !== release) {
+        await $.store.set(WARNED_KEY, release)
+        $.ui.toast(`CLRouter wasn't tested on Claude Code ${release}. /clrouter doctor checks it; /clrouter off if routing misbehaves.`)
+      }
+    } catch (error) {
+      $.ui.log(`clrouter: version check failed (${String(error)})`, { to: 'debug' })
+    }
 
     return next(e)
   })
 
+  // A /clrouter:dev run starts: its background stages may report back for a while.
+  on('command.run', async ($, e, next) => {
+    if (e.command === DEV_COMMAND) {
+      cascadeUntil = (await $.clock.now()) + CASCADE_MS
+    }
+    return next(e)
+  })
+
   on('prompt.submit', async ($, e, next) => {
+    // The prompt `/clrouter redo` put back, sent unchanged, or a cascade stage
+    // reporting back: the turn runs on the tier named, whatever the router says.
+    const isRedo =
+      redo !== null && ROUTED_ORIGINS.has(e.origin.kind) && e.turnId === undefined && typedText(e.text) === redo.text
+    if (ROUTED_ORIGINS.has(e.origin.kind) && !isRedo) {
+      redo = null
+    }
+    const forced =
+      isRedo
+        ? redo
+        : e.origin.kind === 'task-notification' &&
+            e.turnId === undefined &&
+            cascadeUntil !== null &&
+            (await $.clock.now()) < cascadeUntil
+          ? { tier: 'haiku' as const, kind: 'build' as const }
+          : null
+    if (forced !== null) {
+      redo = null
+      const current = tierOfModel(await $.session.model(), config.models) ?? null
+      const tier = forced.tier === current ? null : forced.tier
+      const model = tier === null ? null : await resolveModel($, config.models[tier])
+      pending = { model, tier, effort: null, kind: forced.kind, from: current, asked: false, accepted: null, learnedMove: null, move: null, text: typedText(e.text) }
+      try {
+        return await next(e)
+      } finally {
+        pending = null
+      }
+    }
+
     if (!ROUTED_ORIGINS.has(e.origin.kind) || e.turnId !== undefined) {
+      return next(e)
+    }
+
+    // "That's wrong", soon after a cheaper model answered: the correction
+    // runs on the session's model, and the cheaper model's turn was a miss.
+    const previous = lastRouted
+    if (
+      previous !== null &&
+      isDown(previous) &&
+      isCorrection(e.text) &&
+      (await $.clock.now()) - previous.at < CORRECTION_MS
+    ) {
+      await recordMiss($, previous)
+      $.ui.toast(`Back on ${modelTitle(await $.session.model())} for this one: the last answer came from ${tierTitle(previous.ran ?? 'haiku')}.`)
       return next(e)
     }
 
@@ -375,6 +628,7 @@ export const register: Register = (on, options) => {
 
     // A call the router isn't sure of changes nothing: no popup, no switch.
     const verdict = await judge($, e.text, config)
+    await keepSample($, e.text, verdict?.route ?? null)
     if (verdict === null || verdict.route.confidence === 'low') {
       return next(e)
     }
@@ -389,6 +643,7 @@ export const register: Register = (on, options) => {
     let asked = false
     let accepted: boolean | null = null
     let learnedMove: string | null = null
+    let move: string | null = null
     if (currentTier !== recommended.tier) {
       // A cheaper model re-reads the whole conversation into its own cache.
       // Move only when that, plus its cheaper output, costs less than
@@ -408,7 +663,7 @@ export const register: Register = (on, options) => {
           expectedOutput(await readLedger($), recommended.kind),
           isWarm,
         )
-      const move = moveOf(recommended.kind, currentTier, recommended.tier)
+      move = moveOf(recommended.kind, currentTier, recommended.tier)
       if (pays) {
         if (mode === 'suggest') {
           $.ui.toast(
@@ -463,7 +718,18 @@ export const register: Register = (on, options) => {
     }
     await update($, lastDecision, () => decision)
 
-    pending = { model, tier, effort, kind: recommended.kind, from: currentTier, asked, accepted, learnedMove }
+    pending = {
+      model,
+      tier,
+      effort,
+      kind: recommended.kind,
+      from: currentTier,
+      asked,
+      accepted,
+      learnedMove,
+      move: tier === null ? null : move,
+      text: typedText(e.text),
+    }
     try {
       return await next(e)
     } finally {
@@ -539,6 +805,18 @@ export const register: Register = (on, options) => {
         if (!row.routed && row.ran !== null && row.ran === row.from) {
           warmSince = row.at
         }
+        const route = turn.route
+        lastRouted =
+          row.routed && route !== null
+            ? { text: route.text, kind: route.kind, move: route.move, at: row.at, from: row.from, ran: row.ran, missed: false }
+            : null
+        // An interrupt on a routed turn: that model was wrong for it.
+        if (lastRouted !== null && e.isAborted) {
+          await recordMiss($, lastRouted)
+          if (isDown(lastRouted) && row.from !== null && row.ran !== null) {
+            $.ui.toast(`Interrupted on ${tierTitle(row.ran)}. /clrouter redo sends that prompt again on ${tierTitle(row.from)}.`)
+          }
+        }
       } catch (error) {
         $.ui.log(`clrouter: ledger not written (${String(error)})`, { to: 'debug' })
       }
@@ -570,6 +848,57 @@ export const register: Register = (on, options) => {
       return { text: summarize(await readLedger($), await $.clock.now(), days) }
     }
 
+    if (verb === 'redo') {
+      const last = lastRouted
+      if (last === null) {
+        return { text: "Nothing to redo: the last prompt ran on your session's model." }
+      }
+      const named = rest[0] === undefined ? undefined : TIERS.find(tier => tier === rest[0]?.toLowerCase())
+      if (rest[0] !== undefined && named === undefined) {
+        return { text: 'Usage: /clrouter redo [haiku|sonnet|opus]. With no model, it uses your session\'s.' }
+      }
+      const session = await $.session.model()
+      const target = named ?? tierOfModel(session, config.models) ?? null
+      if (target !== null && target === last.ran) {
+        return { text: `That prompt already ran on ${tierTitle(target)}. Name another: /clrouter redo opus.` }
+      }
+      // A command can't start a turn of its own, so the prompt goes back in the
+      // box: the person sends it, and sees exactly what is sent.
+      const where = named === undefined ? modelTitle(session) : tierTitle(named)
+      await recordMiss($, last)
+      redo = { tier: named ?? null, kind: last.kind, text: last.text }
+      const { isFilled } = await $.prompt.fill({ text: last.text })
+      return {
+        text: isFilled
+          ? `Your last prompt is back in the prompt box. Press Enter to run it on ${where}.`
+          : `Send your last prompt again and it runs on ${where}.`,
+      }
+    }
+
+    if (verb === 'doctor') {
+      return { text: await doctor($, config) }
+    }
+
+    if (verb === 'collect') {
+      const isOn = rest[0] === 'on' ? true : rest[0] === 'off' ? false : null
+      if (isOn === null) {
+        return { text: 'Usage: /clrouter collect on|off. On, CLRouter keeps your prompts on this machine for /clrouter export.' }
+      }
+      await $.store.set(COLLECT_KEY, isOn)
+      if (!isOn) {
+        await $.store.delete(SAMPLES_KEY)
+      }
+      return {
+        text: isOn
+          ? `CLRouter keeps your next prompts (up to ${SAMPLES_MAX}, on this machine only) for /clrouter export. /clrouter collect off deletes them.`
+          : 'CLRouter stopped keeping prompts and deleted the ones it had.',
+      }
+    }
+
+    if (verb === 'export') {
+      return { text: await exportPrompts($) }
+    }
+
     if (verb === 'forget') {
       await $.store.delete(PREFS_KEY)
       return { text: 'CLRouter forgot your answers: it asks again for every kind of work.' }
@@ -587,7 +916,7 @@ export const register: Register = (on, options) => {
     }
 
     if (verb !== '' && verb !== 'status') {
-      return { text: `Unknown: "${verb}". Try /clrouter [stats [days]|ask|auto|suggest|off|reset|forget|test <prompt>].` }
+      return { text: `Unknown: "${verb}". Try /clrouter [stats [days]|redo [model]|doctor|ask|auto|suggest|off|reset|forget|collect on|off|export|test <prompt>].` }
     }
 
     const mode = (await read($, sessionMode)) ?? config.mode

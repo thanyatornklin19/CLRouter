@@ -113,16 +113,28 @@ What to know:
 - **Plans don't publish how each model counts against the window.** "About N% of a five-hour window saved" is an estimate. It assumes usage tracks API prices, calibrated on your own turns, and only appears after five turns with both readings.
 - **Other sessions share the window.** Turns from another session running at the same time land in the same reading.
 - **Models your plan doesn't include fall back.** If the routed model isn't available, the turn is re-sent on your session's model. That is tested with unknown model ids, not with a plan restriction.
-- **Not verified on a real subscription yet.** The window reading is tested against the engine's documented shape, not on a Pro account. If `/clrouter stats` never shows the five-hour line on yours, open an issue.
+- **Not verified on a real subscription yet.** The window reading is tested against the engine's documented shape, not on a Pro account. Run `/clrouter doctor` on yours: it says whether Claude Code gives CLRouter a five-hour reading. Either way, pasting its output into an issue settles it.
 
 ## It learns your answers
 
 - **You switch the same way twice in a row** (say, answers on Opus → Haiku): it stops asking and switches.
 - **You keep your model three times in a row:** it stops offering that move.
-- **You interrupt a turn it switched on its own:** it takes the rule back and asks again.
+- **A switch misses** (below): it counts as a no, and a learned rule is taken back at once.
 - **It isn't sure of a call:** it doesn't ask at all.
 
 `/clrouter` lists what it has learned, and `/clrouter forget` clears it.
+
+## When a cheaper model gets it wrong
+
+No router picks right every time, so a miss should cost one step, not a lost turn. CLRouter treats three things as a miss by the model it switched to:
+
+- **You interrupt the turn.** A toast offers `/clrouter redo`.
+- **You correct it** right after ("that's wrong", "still failing", "ผิด", "ยังไม่ได้"). That prompt runs on your session's model instead of being routed down again.
+- **You run `/clrouter redo`.** Your last routed prompt goes back in the prompt box; press Enter and it runs on your session's model, or on the one you name (`/clrouter redo opus`). Edit it first and it is routed as usual.
+
+Each miss counts against that move, as a no would, and `/clrouter stats` reports the share of routed turns that missed. That share is the field's own quality signal: savings that come with many misses aren't savings.
+
+What it can't see: an answer that was wrong and that you accepted. A correction is only spotted in the next prompt, within half an hour. The last routed turn is kept in memory, so after Claude Code restarts there is nothing to redo.
 
 ## `/clrouter:dev`: a cascade with locked tests (experimental)
 
@@ -151,7 +163,7 @@ The benchmark in [`bench/thai-tax`](../bench/thai-tax) builds a Thai income tax 
 - **On a task this size, the cascade cost more than Sonnet alone.** Writing the tests costs about as much as writing the code. It can only save money when the code is much bigger than its tests, and that isn't measured yet.
 - **That's why Sonnet writes the tests.** Opus tests cost 3× as much for the same score.
 
-**Known issue.** When a stage runs long, Claude Code can finish it in a new turn. That turn runs on your session's model instead of Haiku. It cost $0.14 extra on a Sonnet session, and it would cost more on Opus.
+**Fixed in 0.7: stages that report back late.** A long stage can finish in the background and report back as a new turn, which Claude Code starts on your session's model. In 0.6 that cost $0.14 extra on a Sonnet session. Now, for two hours after `/clrouter:dev` starts, such a turn runs on Haiku, the dispatcher's own model. The fix is covered by the plugin's tests; it hasn't yet been seen in a live run that went to the background. A notification from an unrelated background task in that window runs on Haiku too.
 
 To change a stage's model, edit `model:` in `agents/*.md`, or the attempt order in `commands/dev.md`.
 
@@ -176,6 +188,10 @@ Aliases are resolved to full ids by the plugin: `ANTHROPIC_DEFAULT_HAIKU_MODEL`,
 | --- | --- |
 | `/clrouter` | Mode, models, what it learned from your answers, and the last routing decision. |
 | `/clrouter stats [days]` | What routing cost and saved, and the five-hour window per model (7 days by default). |
+| `/clrouter redo [model]` | Put your last routed prompt back in the prompt box; sent unchanged, it runs on your session's model or the one named. |
+| `/clrouter doctor` | What the plugin can see on your setup: Claude Code version and whether it's in the tested range, the model ids it will send, the price table's date, and whether there's a five-hour reading. |
+| `/clrouter collect on \| off` | Keep your prompts (on this machine, up to 300) for export. Off deletes them. |
+| `/clrouter export` | Write your prompts and the router's call on each to `~/clrouter-prompts.jsonl` (your home folder, never the project), with an empty `want` to fill in. |
 | `/clrouter forget` | Forget your answers: ask again for every kind of work. |
 | `/clrouter ask \| auto \| suggest \| off` | Set the mode for this session. |
 | `/clrouter reset` | Back to the configured mode. |
@@ -191,7 +207,7 @@ claude plugin test .
 claude --plugin-dir .
 ```
 
-`claude --plugin-dir .` loads the working copy and reloads it on save. The first load writes the API's types to `.claude-plugin/types/` (git-ignored), after which `tsc -p .` type-checks the plugin.
+`claude --plugin-dir .` loads the working copy and reloads it on save. [CI](../.github/workflows/ci.yml) runs the same validate and test on the stable and latest Claude Code channels, on every push and daily. The first load writes the API's types to `.claude-plugin/types/` (git-ignored), after which `tsc -p .` type-checks the plugin.
 
 Layout:
 
