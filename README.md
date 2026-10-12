@@ -10,7 +10,16 @@
   <a href="README.th.md">ภาษาไทย</a>
 </p>
 
+<p align="center">
+  <img alt="Version 0.7.0" src="https://img.shields.io/badge/version-0.7.0-blue">
+  <a href="https://github.com/thanyatornklin19/CLRouter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/thanyatornklin19/CLRouter/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Claude Code 2.1.287 to 2.1.296" src="https://img.shields.io/badge/Claude%20Code-2.1.287%E2%80%932.1.296-8A2BE2">
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
+</p>
+
 Running Opus at high effort on every prompt is the expensive default. CLRouter picks the model and the effort per prompt, from what each one was measured to be good at, and asks before it switches.
+
+**Status: beta, ready for daily use in `ask` mode.** Routing down to cheaper models is backed by three benchmarks; when Opus is worth its price is not measured yet. [Details →](#should-you-use-it)
 
 ```
  CLRouter
@@ -63,6 +72,7 @@ CLRouter, last 7 days: 212 turns.
 - Sent to another model: 64 (Haiku 51, Sonnet 13). Effort only: 98. Left alone: 50.
 - Those turns cost $0.41. On your session's model they'd have cost at least $2.90: saved at least $2.49.
 - Five-hour window used per turn: Haiku 0.1%, Sonnet 0.8%, Opus 2.3%.
+- Misses: 3 of 64 routed turns (5%) were interrupted, corrected or sent again on another model.
 ```
 
 <sub>Example output. Yours comes from your own turns.</sub>
